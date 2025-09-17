@@ -76,12 +76,13 @@
       background: #f8f9fe;
     }
     .chart-card {
+      height: 360px;
       background: #fff;
       border-radius: 10px;
       padding: 1.5rem;
       box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
     }
-    canvas { width: 100% !important; height: 320px !important; }
+    canvas { width: 100%; height: 100%; display: block; }
     .inputs-note {
       font-size: 0.85rem;
       color: #777;
@@ -212,7 +213,9 @@
     if (summary.category_spend) {
       const labels = Object.keys(summary.category_spend);
       const data = Object.values(summary.category_spend);
-      const ctx = document.getElementById('categoryChart');
+      const canvas = document.getElementById('categoryChart');
+      canvas.height = 320;
+      const ctx = canvas.getContext('2d');
       new Chart(ctx, {
         type: 'bar',
         data: {
@@ -221,11 +224,14 @@
             label: 'Spend ($)',
             data,
             borderRadius: 8,
-            backgroundColor: 'rgba(54, 99, 235, 0.65)'
+            backgroundColor: 'rgba(54, 99, 235, 0.65)',
+            hoverBackgroundColor: 'rgba(54, 99, 235, 0.85)'
           }]
         },
         options: {
           responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: 'index', intersect: false },
           plugins: {
             legend: { display: false },
             tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } }
