@@ -30,4 +30,4 @@ From the project root, run:
 
    `flask --app finance_analyzer.webapp run`
 
-   Visit http://127.0.0.1:5000/ to view the dashboard.
+   Visit http://127.0.0.1:5000/ to view the dashboard. Append `?window=1` or `?window=6` to adjust the time window.

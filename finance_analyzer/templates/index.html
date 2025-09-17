@@ -13,62 +13,113 @@
     }
     body { margin: 0; }
     .page {
-      max-width: 960px;
+      max-width: 1100px;
       margin: 0 auto;
-      padding: 2rem 1.5rem 4rem;
+      padding: 2.5rem 1.5rem 4rem;
     }
     header h1 {
       margin: 0 0 0.25rem;
-      font-size: 2.1rem;
+      font-size: 2.2rem;
     }
     header p {
       margin: 0;
       color: #555;
     }
+    .inputs-note {
+      font-size: 0.9rem;
+      margin-bottom: 0.5rem;
+    }
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 1rem;
+      margin: 1.2rem 0 2rem;
+    }
+    .date-range {
+      font-weight: 600;
+      color: #2a3d66;
+    }
+    .window-form {
+      display: inline-flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      align-items: center;
+    }
+    .window-label {
+      font-size: 0.9rem;
+      color: #555;
+    }
+    .window-form button {
+      border: 1px solid #cbd2ea;
+      background: #fff;
+      color: #2a3d66;
+      padding: 0.45rem 0.9rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 0.9rem;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
+    }
+    .window-form button:hover {
+      background: #2a3d66;
+      color: #fff;
+    }
+    .window-form button.active {
+      background: #365feb;
+      border-color: #365feb;
+      color: #fff;
+      box-shadow: 0 6px 20px rgba(54, 95, 235, 0.25);
+    }
+    section {
+      margin: 3rem 0;
+    }
+    section h2 {
+      margin-bottom: 0.8rem;
+      font-size: 1.6rem;
+      border-bottom: 2px solid #eceef5;
+      padding-bottom: 0.5rem;
+    }
+    .section-help {
+      margin-top: 0;
+      margin-bottom: 1.25rem;
+      color: #6b7285;
+      font-size: 0.95rem;
+    }
     .totals {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-      gap: 1rem;
-      margin: 2rem 0;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1.2rem;
+      margin-bottom: 2rem;
     }
     .card {
       background: #fff;
-      border-radius: 10px;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
-      padding: 1.25rem 1.5rem;
+      border-radius: 12px;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+      padding: 1.4rem 1.6rem;
     }
-    .card h2 {
+    .card h3 {
       margin: 0 0 0.5rem;
       font-size: 1rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
-      color: #666;
+      color: #6b7285;
     }
     .card strong {
-      font-size: 1.65rem;
+      font-size: 1.7rem;
       display: block;
-    }
-    section {
-      margin: 2.5rem 0;
-    }
-    section h2 {
-      margin-bottom: 1rem;
-      font-size: 1.5rem;
-      border-bottom: 2px solid #eceef5;
-      padding-bottom: 0.5rem;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       background: #fff;
-      border-radius: 10px;
+      border-radius: 12px;
       overflow: hidden;
     }
     table thead {
       background: #eef1fb;
     }
     table th, table td {
-      padding: 0.65rem 0.9rem;
+      padding: 0.7rem 1rem;
       text-align: left;
       font-size: 0.95rem;
     }
@@ -76,16 +127,30 @@
       background: #f8f9fe;
     }
     .chart-card {
+      position: relative;
       height: 360px;
       background: #fff;
-      border-radius: 10px;
+      border-radius: 12px;
       padding: 1.5rem;
-      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.06);
+      margin-bottom: 1.5rem;
     }
-    canvas { width: 100%; height: 100%; display: block; }
-    .inputs-note {
-      font-size: 0.85rem;
-      color: #777;
+    canvas {
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    @media (max-width: 720px) {
+      .controls {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .window-form {
+        width: 100%;
+      }
+      .window-form button {
+        flex: 1 0 auto;
+      }
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -95,29 +160,43 @@
     <header>
       <h1>Personal Finance Analyzer</h1>
       <p class="inputs-note">Currently analyzing: {{ inputs | join(', ') }}</p>
+      <div class="controls">
+        <p class="date-range">Currently analyzing data {{ summary.date_range.display }}</p>
+        <form class="window-form" method="get">
+          <span class="window-label">View:</span>
+          {% for option in window_options %}
+          <button type="submit" name="window" value="{{ option }}" class="{% if option == active_window %}active{% endif %}">
+            {% if option == 1 %}Last month{% elif option == 3 %}Last 3 months{% elif option == 6 %}Last 6 months{% else %}Last {{ option }} months{% endif %}
+          </button>
+          {% endfor %}
+          {% for path in inputs %}
+          <input type="hidden" name="input" value="{{ path }}">
+          {% endfor %}
+        </form>
+      </div>
     </header>
 
-    <div class="totals">
-      <div class="card">
-        <h2>Income</h2>
-        <strong>${{ '%0.2f'|format(summary.totals.income) }}</strong>
+    <section id="overview">
+      <h2>Spending Overview</h2>
+      <p class="section-help">Use this snapshot to understand overall income, expenses, and how spending breaks down by category for {{ window_label.lower() }}.</p>
+      <div class="totals">
+        <div class="card">
+          <h3>Income</h3>
+          <strong>${{ '%0.2f'|format(summary.totals.income) }}</strong>
+        </div>
+        <div class="card">
+          <h3>Expenses</h3>
+          <strong>${{ '%0.2f'|format(summary.totals.expense) }}</strong>
+        </div>
+        <div class="card">
+          <h3>Net</h3>
+          <strong>${{ '%0.2f'|format(summary.totals.net) }}</strong>
+        </div>
       </div>
-      <div class="card">
-        <h2>Expenses</h2>
-        <strong>${{ '%0.2f'|format(summary.totals.expense) }}</strong>
-      </div>
-      <div class="card">
-        <h2>Net</h2>
-        <strong>${{ '%0.2f'|format(summary.totals.net) }}</strong>
-      </div>
-    </div>
-
-    <section>
-      <h2>Spend by Category</h2>
       <div class="chart-card">
-        <canvas id="categoryChart" aria-label="Spend by category" role="img"></canvas>
+        <canvas id="categoryChart"></canvas>
       </div>
-      <table>
+      <table aria-label="Spend by category">
         <thead>
           <tr><th>Category</th><th>Amount</th></tr>
         </thead>
@@ -131,10 +210,33 @@
       </table>
     </section>
 
+    <section id="monthly">
+      <h2>Monthly Totals</h2>
+      <p class="section-help">Track monthly inflows and outflows to spot seasonal shifts or budget changes.</p>
+      <table aria-label="Monthly totals">
+        <thead>
+          <tr><th>Month</th><th>Income</th><th>Expense</th><th>Net</th></tr>
+        </thead>
+        <tbody>
+          {% for month, vals in summary.monthly.items() %}
+          <tr>
+            <td>{{ month }}</td>
+            <td>${{ '%0.2f'|format(vals.income) }}</td>
+            <td>${{ '%0.2f'|format(vals.expense) }}</td>
+            <td>${{ '%0.2f'|format(vals.net) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No monthly data available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
     {% if summary.budget_status %}
-    <section>
-      <h2>Budget Status (Current Month)</h2>
-      <table>
+    <section id="budget">
+      <h2>Budget Status</h2>
+      <p class="section-help">Compare actual spending against your configured monthly limits for the current month.</p>
+      <table aria-label="Budget status">
         <thead>
           <tr><th>Category</th><th>Limit</th><th>Actual</th><th>Remaining</th></tr>
         </thead>
@@ -154,46 +256,27 @@
     </section>
     {% endif %}
 
-    <section>
-      <h2>Monthly Totals</h2>
-      <table>
+    <section id="top-purchases">
+      <h2>Top Purchases</h2>
+      <p class="section-help">Highest-spend merchants or descriptions in {{ window_label.lower() }} to spotlight where money is going.</p>
+      <table aria-label="Top purchases">
         <thead>
-          <tr><th>Month</th><th>Income</th><th>Expense</th><th>Net</th></tr>
-        </thead>
-        <tbody>
-          {% for month, vals in summary.monthly.items() %}
-          <tr>
-            <td>{{ month }}</td>
-            <td>${{ '%0.2f'|format(vals.income) }}</td>
-            <td>${{ '%0.2f'|format(vals.expense) }}</td>
-            <td>${{ '%0.2f'|format(vals.net) }}</td>
-          </tr>
-          {% else %}
-          <tr><td colspan="4">No monthly data available.</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </section>
-
-    <section>
-      <h2>Top Merchants</h2>
-      <table>
-        <thead>
-          <tr><th>Merchant</th><th>Spend</th></tr>
+          <tr><th>Merchant / Description</th><th>Spend</th></tr>
         </thead>
         <tbody>
           {% for desc, amt in summary.top_merchants %}
           <tr><td>{{ desc }}</td><td>${{ '%0.2f'|format(amt) }}</td></tr>
           {% else %}
-          <tr><td colspan="2">No merchants ranked yet.</td></tr>
+          <tr><td colspan="2">No purchases ranked yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
     </section>
 
-    <section>
+    <section id="recurring">
       <h2>Recurring Payments</h2>
-      <table>
+      <p class="section-help">Identify subscriptions and routine bills based on merchants appearing across multiple months.</p>
+      <table aria-label="Recurring payments">
         <thead>
           <tr><th>Description</th><th>Typical Amount</th><th>Months Seen</th></tr>
         </thead>
@@ -210,12 +293,13 @@
 
   <script>
     const summary = {{ summary | tojson }};
-    if (summary.category_spend) {
+    const chartTitle = {{ chart_title | tojson }};
+    if (summary.category_spend && Object.keys(summary.category_spend).length) {
       const labels = Object.keys(summary.category_spend);
       const data = Object.values(summary.category_spend);
       const canvas = document.getElementById('categoryChart');
-      canvas.height = 320;
       const ctx = canvas.getContext('2d');
+      canvas.height = 360;
       new Chart(ctx, {
         type: 'bar',
         data: {
@@ -233,11 +317,13 @@
           maintainAspectRatio: false,
           interaction: { mode: 'index', intersect: false },
           plugins: {
+            title: { display: true, text: chartTitle },
             legend: { display: false },
             tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } }
           },
           scales: {
-            y: { beginAtZero: true }
+            x: { title: { display: true, text: 'Category' } },
+            y: { beginAtZero: true, title: { display: true, text: 'Amount ($)' } }
           }
         }
       });
@@ -245,4 +331,3 @@
   </script>
 </body>
 </html>
-
