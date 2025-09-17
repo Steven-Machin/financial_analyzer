@@ -24,3 +24,10 @@ From the project root, run:
 
    `python -m finance_analyzer.cli -i sample_data/sample_transactions.csv -c my_config.json`
 
+4) Web dashboard
+
+   Install requirements (`pip install -r requirements.txt`), then launch:
+
+   `flask --app finance_analyzer.webapp run`
+
+   Visit http://127.0.0.1:5000/ to view the dashboard.

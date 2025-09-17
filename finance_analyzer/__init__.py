@@ -6,6 +6,8 @@ __all__ = [
     "categorizer",
     "analytics",
     "reports",
+    "webapp",
 ]
 
 __version__ = "0.1.0"
+

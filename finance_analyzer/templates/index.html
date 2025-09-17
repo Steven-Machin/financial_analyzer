@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Personal Finance Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f6f7fb;
+      color: #222;
+    }
+    body { margin: 0; }
+    .page {
+      max-width: 960px;
+      margin: 0 auto;
+      padding: 2rem 1.5rem 4rem;
+    }
+    header h1 {
+      margin: 0 0 0.25rem;
+      font-size: 2.1rem;
+    }
+    header p {
+      margin: 0;
+      color: #555;
+    }
+    .totals {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+    .card {
+      background: #fff;
+      border-radius: 10px;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+      padding: 1.25rem 1.5rem;
+    }
+    .card h2 {
+      margin: 0 0 0.5rem;
+      font-size: 1rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #666;
+    }
+    .card strong {
+      font-size: 1.65rem;
+      display: block;
+    }
+    section {
+      margin: 2.5rem 0;
+    }
+    section h2 {
+      margin-bottom: 1rem;
+      font-size: 1.5rem;
+      border-bottom: 2px solid #eceef5;
+      padding-bottom: 0.5rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    table thead {
+      background: #eef1fb;
+    }
+    table th, table td {
+      padding: 0.65rem 0.9rem;
+      text-align: left;
+      font-size: 0.95rem;
+    }
+    table tbody tr:nth-child(even) {
+      background: #f8f9fe;
+    }
+    .chart-card {
+      background: #fff;
+      border-radius: 10px;
+      padding: 1.5rem;
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
+    }
+    canvas { width: 100% !important; height: 320px !important; }
+    .inputs-note {
+      font-size: 0.85rem;
+      color: #777;
+    }
+  </style>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+  <div class="page">
+    <header>
+      <h1>Personal Finance Analyzer</h1>
+      <p class="inputs-note">Currently analyzing: {{ inputs | join(', ') }}</p>
+    </header>
+
+    <div class="totals">
+      <div class="card">
+        <h2>Income</h2>
+        <strong>${{ '%0.2f'|format(summary.totals.income) }}</strong>
+      </div>
+      <div class="card">
+        <h2>Expenses</h2>
+        <strong>${{ '%0.2f'|format(summary.totals.expense) }}</strong>
+      </div>
+      <div class="card">
+        <h2>Net</h2>
+        <strong>${{ '%0.2f'|format(summary.totals.net) }}</strong>
+      </div>
+    </div>
+
+    <section>
+      <h2>Spend by Category</h2>
+      <div class="chart-card">
+        <canvas id="categoryChart" aria-label="Spend by category" role="img"></canvas>
+      </div>
+      <table>
+        <thead>
+          <tr><th>Category</th><th>Amount</th></tr>
+        </thead>
+        <tbody>
+          {% for cat, amt in summary.category_spend.items() %}
+          <tr><td>{{ cat }}</td><td>${{ '%0.2f'|format(amt) }}</td></tr>
+          {% else %}
+          <tr><td colspan="2">No categorized spending yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    {% if summary.budget_status %}
+    <section>
+      <h2>Budget Status (Current Month)</h2>
+      <table>
+        <thead>
+          <tr><th>Category</th><th>Limit</th><th>Actual</th><th>Remaining</th></tr>
+        </thead>
+        <tbody>
+          {% for cat, vals in summary.budget_status.items() %}
+          <tr>
+            <td>{{ cat }}</td>
+            <td>${{ '%0.2f'|format(vals.limit) }}</td>
+            <td>${{ '%0.2f'|format(vals.actual) }}</td>
+            <td>${{ '%0.2f'|format(vals.remaining) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No budgets configured.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+
+    <section>
+      <h2>Monthly Totals</h2>
+      <table>
+        <thead>
+          <tr><th>Month</th><th>Income</th><th>Expense</th><th>Net</th></tr>
+        </thead>
+        <tbody>
+          {% for month, vals in summary.monthly.items() %}
+          <tr>
+            <td>{{ month }}</td>
+            <td>${{ '%0.2f'|format(vals.income) }}</td>
+            <td>${{ '%0.2f'|format(vals.expense) }}</td>
+            <td>${{ '%0.2f'|format(vals.net) }}</td>
+          </tr>
+          {% else %}
+          <tr><td colspan="4">No monthly data available.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Top Merchants</h2>
+      <table>
+        <thead>
+          <tr><th>Merchant</th><th>Spend</th></tr>
+        </thead>
+        <tbody>
+          {% for desc, amt in summary.top_merchants %}
+          <tr><td>{{ desc }}</td><td>${{ '%0.2f'|format(amt) }}</td></tr>
+          {% else %}
+          <tr><td colspan="2">No merchants ranked yet.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>Recurring Payments</h2>
+      <table>
+        <thead>
+          <tr><th>Description</th><th>Typical Amount</th><th>Months Seen</th></tr>
+        </thead>
+        <tbody>
+          {% for desc, amt, months in summary.recurring %}
+          <tr><td>{{ desc }}</td><td>${{ '%0.2f'|format(amt) }}</td><td>{{ months }}</td></tr>
+          {% else %}
+          <tr><td colspan="3">No recurring payments detected.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <script>
+    const summary = {{ summary | tojson }};
+    if (summary.category_spend) {
+      const labels = Object.keys(summary.category_spend);
+      const data = Object.values(summary.category_spend);
+      const ctx = document.getElementById('categoryChart');
+      new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels,
+          datasets: [{
+            label: 'Spend ($)',
+            data,
+            borderRadius: 8,
+            backgroundColor: 'rgba(54, 99, 235, 0.65)'
+          }]
+        },
+        options: {
+          responsive: true,
+          plugins: {
+            legend: { display: false },
+            tooltip: { callbacks: { label: ctx => `$${ctx.parsed.y.toFixed(2)}` } }
+          },
+          scales: {
+            y: { beginAtZero: true }
+          }
+        }
+      });
+    }
+  </script>
+</body>
+</html>
+
