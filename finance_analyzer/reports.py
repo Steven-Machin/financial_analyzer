@@ -7,13 +7,13 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict, Iterable, List, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 from .data_loader import Transaction
 from . import analytics as an
 
 
-def build_summary(txns: Iterable[Transaction]) -> Dict:
+def build_summary(txns: Iterable[Transaction], budgets: Optional[Dict[str, float]] = None) -> Dict:
     txns = list(txns)
     summary = {
         "totals": an.summarize_income_expense(txns),
@@ -22,6 +22,8 @@ def build_summary(txns: Iterable[Transaction]) -> Dict:
         "top_merchants": an.top_merchants(txns, n=10),
         "recurring": an.detect_recurring(txns),
     }
+    if budgets:
+        summary["budget_status"] = an.budget_comparison(txns, budgets)
     return summary
 
 
@@ -43,6 +45,13 @@ def format_text_report(summary: Dict) -> str:
     for m, vals in summary["monthly"].items():
         lines.append(f"{m} | Inc ${vals['income']:.2f}  Exp ${vals['expense']:.2f}  Net ${vals['net']:.2f}")
     lines.append("")
+
+    budget = summary.get("budget_status")
+    if budget:
+        lines.append("-- Budget Status (Current Month) --")
+        for cat, vals in budget.items():
+            lines.append(f"{cat:15} Limit ${vals['limit']:.2f}  Actual ${vals['actual']:.2f}  Remaining ${vals['remaining']:.2f}")
+        lines.append("")
 
     lines.append("-- Top Merchants (Spend) --")
     for desc, amt in summary["top_merchants"]:

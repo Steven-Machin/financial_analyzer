@@ -49,7 +49,8 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     categorize_transactions(txns, cfg.rules)
 
-    summary = build_summary(txns)
+    budget_limits = {b.category: b.monthly_limit for b in cfg.budgets}
+    summary = build_summary(txns, budget_limits or None)
     print(format_text_report(summary))
 
     if args.json_out:
