@@ -70,6 +70,108 @@
       color: #fff;
       box-shadow: 0 6px 20px rgba(54, 95, 235, 0.25);
     }
+
+    .manual-card {
+      background: #fff;
+      border-radius: 12px;
+      padding: 1.5rem;
+      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+      margin-bottom: 2.5rem;
+    }
+    .transaction-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      align-items: end;
+    }
+    .transaction-form .field-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .transaction-form label {
+      font-size: 0.85rem;
+      color: #52607c;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .transaction-form input,
+    .transaction-form select {
+      border: 1px solid #cbd2ea;
+      border-radius: 8px;
+      padding: 0.55rem 0.65rem;
+      font-size: 0.95rem;
+      background: #fdfdff;
+    }
+    .transaction-form button {
+      border: none;
+      background: #365feb;
+      color: #fff;
+      padding: 0.65rem 1.2rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      box-shadow: 0 6px 20px rgba(54, 95, 235, 0.25);
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .transaction-form button:hover {
+      background: #2a3d66;
+      box-shadow: 0 10px 24px rgba(42, 61, 102, 0.3);
+    }
+    .form-errors {
+      background: #ffe8e6;
+      border: 1px solid #f5b1ac;
+      color: #8a1f17;
+      border-radius: 8px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1rem;
+    }
+    .form-errors ul {
+      margin: 0;
+      padding-left: 1.2rem;
+    }
+    .manual-actions {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 1.25rem;
+    }
+    .manual-actions form {
+      margin: 0;
+    }
+    .manual-actions button {
+      border: 1px solid #cbd2ea;
+      background: #fff;
+      color: #2a3d66;
+      padding: 0.4rem 0.9rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .manual-actions button:hover {
+      background: #f0f4ff;
+    }
+    .manual-table {
+      margin-top: 1rem;
+    }
+    .manual-table td.actions {
+      text-align: right;
+    }
+    .manual-table form button {
+      border: none;
+      background: #f87171;
+      color: #fff;
+      padding: 0.4rem 0.8rem;
+      border-radius: 6px;
+      cursor: pointer;
+      font-size: 0.85rem;
+    }
+    .manual-table form button:hover {
+      background: #dc2626;
+    }
     section {
       margin: 3rem 0;
     }
@@ -151,6 +253,12 @@
       .window-form button {
         flex: 1 0 auto;
       }
+      .transaction-form {
+        grid-template-columns: 1fr;
+      }
+      .transaction-form button {
+        width: 100%;
+      }
     }
   </style>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -159,7 +267,7 @@
   <div class="page">
     <header>
       <h1>Personal Finance Analyzer</h1>
-      <p class="inputs-note">Currently analyzing: {{ inputs | join(', ') }}</p>
+      <p class="inputs-note">Currently analyzing: {{ data_source_label }}</p>
       <div class="controls">
         <p class="date-range">Currently analyzing data {{ summary.date_range.display }}</p>
         <form class="window-form" method="get">
@@ -175,6 +283,104 @@
         </form>
       </div>
     </header>
+
+    <section id="manual-entry">
+      <div class="manual-card">
+        <h2>Manual Transactions</h2>
+        <p class="section-help">Start from scratch by recording spending or income. Entries stay in this browser session so you can experiment freely.</p>
+        {% if errors %}
+        <div class="form-errors" role="alert">
+          <ul>
+            {% for message in errors %}
+            <li>{{ message }}</li>
+            {% endfor %}
+          </ul>
+        </div>
+        {% endif %}
+        <form class="transaction-form" method="post" autocomplete="off">
+          <input type="hidden" name="action" value="add">
+          <input type="hidden" name="window" value="{{ active_window }}">
+          {% for path in inputs %}
+          <input type="hidden" name="input" value="{{ path }}">
+          {% endfor %}
+          <div class="field-group">
+            <label for="txn-date">Date</label>
+            <input id="txn-date" type="date" name="date" value="{{ form_data.date }}" required>
+          </div>
+          <div class="field-group">
+            <label for="txn-description">Description</label>
+            <input id="txn-description" type="text" name="description" value="{{ form_data.description }}" placeholder="Groceries, rent, utilities..." required>
+          </div>
+          <div class="field-group">
+            <label for="txn-kind">Type</label>
+            <select id="txn-kind" name="kind">
+              <option value="expense" {% if form_data.kind != 'income' %}selected{% endif %}>Expense</option>
+              <option value="income" {% if form_data.kind == 'income' %}selected{% endif %}>Income</option>
+            </select>
+          </div>
+          <div class="field-group">
+            <label for="txn-amount">Amount</label>
+            <input id="txn-amount" type="number" step="0.01" min="0" name="amount" value="{{ form_data.amount }}" placeholder="0.00" required>
+          </div>
+          <div class="field-group">
+            <label for="txn-account">Account (optional)</label>
+            <input id="txn-account" type="text" name="account" value="{{ form_data.account }}" placeholder="Checking, credit card, cash...">
+          </div>
+          <button type="submit">Add Transaction</button>
+        </form>
+        <div class="manual-actions">
+          <p class="section-help">{{ manual_count }} manual transaction{% if manual_count != 1 %}s{% endif %} captured.</p>
+          {% if manual_transactions %}
+          <form method="post">
+            <input type="hidden" name="action" value="clear">
+            <input type="hidden" name="window" value="{{ active_window }}">
+            {% for path in inputs %}
+            <input type="hidden" name="input" value="{{ path }}">
+            {% endfor %}
+            <button type="submit">Clear All</button>
+          </form>
+          {% endif %}
+        </div>
+        {% if manual_transactions %}
+        <table class="manual-table" aria-label="Manual transactions">
+          <thead>
+            <tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th><th>Account</th><th></th></tr>
+          </thead>
+          <tbody>
+            {% for txn in manual_transactions %}
+            <tr>
+              <td>{{ txn.date }}</td>
+              <td>{{ txn.description }}</td>
+              <td>{{ 'Income' if txn.kind == 'income' else 'Expense' }}</td>
+              <td>
+                {% if txn.amount is not none %}
+                {% if txn.kind == 'expense' %}-{% else %}+{% endif %}${{ '%0.2f'|format(txn.amount|abs) }}
+                {% else %}
+                --
+                {% endif %}
+              </td>
+              <td>{{ txn.account if txn.account else '--' }}</td>
+              <td class="actions">
+                <form method="post">
+                  <input type="hidden" name="action" value="delete">
+                  <input type="hidden" name="index" value="{{ txn.index }}">
+                  <input type="hidden" name="window" value="{{ active_window }}">
+                  {% for path in inputs %}
+                  <input type="hidden" name="input" value="{{ path }}">
+                  {% endfor %}
+                  <button type="submit">Remove</button>
+                </form>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% else %}
+        <p class="section-help">No manual transactions yet. Add one above to populate the dashboard.</p>
+        {% endif %}
+      </div>
+    </section>
+
 
     <section id="overview">
       <h2>Spending Overview</h2>

@@ -1,4 +1,4 @@
-"""Flask web interface for the Personal Finance Analyzer."""
+﻿"""Flask web interface for the Personal Finance Analyzer."""
 
 from __future__ import annotations
 
@@ -6,10 +6,10 @@ import datetime as dt
 from pathlib import Path
 from typing import List, Optional
 
-from flask import Flask, jsonify, render_template, request
+from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
 from .config import AppConfig
-from .data_loader import load_csv_files
+from .data_loader import Transaction, load_csv_files
 from .categorizer import categorize_transactions
 from .reports import build_summary
 
@@ -18,6 +18,7 @@ PROJECT_ROOT = PACKAGE_ROOT.parent
 
 WINDOW_OPTIONS = (1, 3, 6)
 DEFAULT_WINDOW = 3
+SESSION_KEY = "manual_transactions"
 
 
 def _resolve_paths(paths: List[str]) -> List[Path]:
@@ -99,16 +100,83 @@ def _window_label(months: int) -> str:
     return f"Last {months} Months"
 
 
-def _load_summary(inputs: List[str], config_path: Optional[str], window_months: int) -> dict:
-    resolved_inputs = _resolve_paths(inputs)
+def _get_manual_entries() -> List[dict]:
+    data = session.get(SESSION_KEY, [])
+    entries: List[dict] = []
+    if isinstance(data, list):
+        for item in data:
+            if isinstance(item, dict):
+                entries.append(
+                    {
+                        "date": item.get("date"),
+                        "description": item.get("description", ""),
+                        "amount": item.get("amount"),
+                        "account": item.get("account"),
+                        "kind": item.get("kind"),
+                    }
+                )
+    return entries
+
+
+def _store_manual_entries(entries: List[dict]) -> None:
+    session[SESSION_KEY] = entries
+
+
+def _entries_to_transactions(entries: List[dict]) -> List[Transaction]:
+    txns: List[Transaction] = []
+    for item in entries:
+        date_raw = item.get("date")
+        amount_raw = item.get("amount")
+        description = item.get("description", "")
+        account = item.get("account") or None
+        try:
+            if not date_raw:
+                continue
+            date = dt.date.fromisoformat(str(date_raw))
+        except (TypeError, ValueError):
+            continue
+        try:
+            amount = float(amount_raw)
+        except (TypeError, ValueError):
+            continue
+        txns.append(Transaction(date=date, description=description, amount=amount, account=account))
+    txns.sort(key=lambda t: (t.date, t.description, t.amount))
+    return txns
+
+
+def _redirect_to_index(window_months: int, inputs: List[str], default_window: int):
+    params: dict = {}
+    if window_months != default_window:
+        params["window"] = window_months
+    if inputs:
+        params["input"] = inputs
+    return redirect(url_for("index", **params))
+
+
+def _load_summary(
+    inputs: List[str],
+    config_path: Optional[str],
+    window_months: int,
+    manual_txns: Optional[List[Transaction]] = None,
+) -> dict:
+    resolved_inputs = _resolve_paths(inputs) if inputs else []
     resolved_config = _resolve_config_path(config_path)
     cfg = AppConfig.load(resolved_config)
-    txns = load_csv_files(resolved_inputs)
+
+    txns: List[Transaction] = []
+    if resolved_inputs:
+        txns.extend(load_csv_files(resolved_inputs))
+    if manual_txns:
+        txns.extend(manual_txns)
+    if txns:
+        txns.sort(key=lambda t: (t.date, t.description, t.amount))
+
     categorize_transactions(txns, cfg.rules)
     filtered_txns = _filter_recent_transactions(txns, window_months)
     budget_limits = {b.category: b.monthly_limit for b in cfg.budgets}
     summary = build_summary(filtered_txns, budget_limits or None)
     summary["date_range"] = _format_range_metadata(filtered_txns)
+    summary["transaction_count"] = len(filtered_txns)
     return summary
 
 
@@ -118,18 +186,142 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         template_folder=str(PACKAGE_ROOT / "templates"),
         static_folder=str(PACKAGE_ROOT / "static"),
     )
+    app.config.setdefault("SECRET_KEY", "dev-secret-key")
 
-    default_inputs = default_inputs or ["sample_data/sample_transactions.csv"]
+    default_inputs = default_inputs or []
     default_window = DEFAULT_WINDOW
 
-    @app.route("/")
-    def index() -> str:
-        inputs = request.args.getlist("input") or default_inputs
-        window_value = request.args.get("window")
+    @app.route("/", methods=["GET", "POST"])
+    def index():
+        inputs = (
+            request.form.getlist("input")
+            if request.method == "POST"
+            else request.args.getlist("input")
+        ) or default_inputs
+        window_value = request.values.get("window")
         window_months = _normalize_window(window_value, default_window)
-        summary = _load_summary(inputs, config_path, window_months)
+
+        errors: List[str] = []
+        form_data = {
+            "date": "",
+            "description": "",
+            "amount": "",
+            "account": "",
+            "kind": "expense",
+        }
+
+        manual_entries = _get_manual_entries()
+
+        if request.method == "POST":
+            action = request.form.get("action", "add")
+            form_data = {
+                "date": (request.form.get("date", "") or "").strip(),
+                "description": (request.form.get("description", "") or "").strip(),
+                "amount": (request.form.get("amount", "") or "").strip(),
+                "account": (request.form.get("account", "") or "").strip(),
+                "kind": request.form.get("kind", "expense"),
+            }
+
+            if action == "add":
+                if not form_data["date"]:
+                    errors.append("Date is required.")
+                if not form_data["description"]:
+                    errors.append("Description is required.")
+                if not form_data["amount"]:
+                    errors.append("Amount is required.")
+
+                tx_type = form_data.get("kind") or "expense"
+                if tx_type not in {"expense", "income"}:
+                    tx_type = "expense"
+
+                try:
+                    date_value = dt.date.fromisoformat(form_data["date"])
+                except ValueError:
+                    errors.append("Date must be in YYYY-MM-DD format.")
+                    date_value = None
+
+                try:
+                    amount_value = float(form_data["amount"])
+                except ValueError:
+                    errors.append("Amount must be a valid number.")
+                    amount_value = None
+
+                if amount_value == 0:
+                    errors.append("Amount cannot be zero.")
+
+                if not errors and amount_value is not None:
+                    if tx_type == "expense":
+                        amount_value = -abs(amount_value)
+                    else:
+                        amount_value = abs(amount_value)
+
+                if not errors and date_value and amount_value is not None:
+                    manual_entries.append(
+                        {
+                            "date": date_value.isoformat(),
+                            "description": form_data["description"],
+                            "amount": amount_value,
+                            "account": form_data["account"] or None,
+                            "kind": tx_type,
+                        }
+                    )
+                    _store_manual_entries(manual_entries)
+                    return _redirect_to_index(window_months, inputs, default_window)
+
+            elif action == "delete":
+                idx_raw = request.form.get("index")
+                try:
+                    idx = int(idx_raw)
+                except (TypeError, ValueError):
+                    idx = None
+                if idx is None or idx < 0 or idx >= len(manual_entries):
+                    errors.append("Unable to remove transaction.")
+                else:
+                    manual_entries.pop(idx)
+                    _store_manual_entries(manual_entries)
+                    return _redirect_to_index(window_months, inputs, default_window)
+
+            elif action == "clear":
+                manual_entries = []
+                _store_manual_entries(manual_entries)
+                return _redirect_to_index(window_months, inputs, default_window)
+
+        manual_txns = _entries_to_transactions(manual_entries)
+        summary = _load_summary(inputs, config_path, window_months, manual_txns)
         window_label = _window_label(window_months)
         chart_title = f"Spending by Category ({window_label})"
+
+        manual_display = []
+        for idx, entry in enumerate(manual_entries):
+            amount_val = entry.get("amount")
+            try:
+                amount_val = float(amount_val)
+            except (TypeError, ValueError):
+                amount_val = None
+            manual_display.append(
+                {
+                    "index": idx,
+                    "date": entry.get("date"),
+                    "description": entry.get("description", ""),
+                    "amount": amount_val,
+                    "account": entry.get("account") or "",
+                    "kind": entry.get("kind") or ("income" if (amount_val or 0) >= 0 else "expense"),
+                }
+            )
+
+        manual_count = len(manual_txns)
+        if inputs:
+            parts = [", ".join(inputs)]
+            if manual_count:
+                parts.append(f"{manual_count} manual entr{'y' if manual_count == 1 else 'ies'}")
+            data_source_label = " + ".join(parts)
+        else:
+            data_source_label = (
+                f"{manual_count} manual entr{'y' if manual_count == 1 else 'ies'}"
+                if manual_count
+                else "No data yet"
+            )
+
         return render_template(
             "index.html",
             summary=summary,
@@ -138,6 +330,11 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             window_options=WINDOW_OPTIONS,
             window_label=window_label,
             chart_title=chart_title,
+            manual_transactions=manual_display,
+            manual_count=manual_count,
+            data_source_label=data_source_label,
+            errors=errors,
+            form_data=form_data,
         )
 
     @app.route("/api/summary")
@@ -145,9 +342,11 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         inputs = request.args.getlist("input") or default_inputs
         window_value = request.args.get("window")
         window_months = _normalize_window(window_value, default_window)
-        summary = _load_summary(inputs, config_path, window_months)
+        manual_txns = _entries_to_transactions(_get_manual_entries())
+        summary = _load_summary(inputs, config_path, window_months, manual_txns)
         summary["window_months"] = window_months
         summary["window_label"] = _window_label(window_months)
+        summary["manual_transaction_count"] = len(manual_txns)
         return jsonify(summary)
 
     return app
