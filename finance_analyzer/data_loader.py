@@ -16,6 +16,9 @@ from pathlib import Path
 from typing import Iterable, List, Optional, TextIO
 
 
+DEFAULT_ACCOUNT = "Checking"
+
+
 @dataclass
 class Transaction:
     date: dt.date
@@ -24,6 +27,18 @@ class Transaction:
     account: Optional[str] = None
     category: Optional[str] = None  # filled later by categorizer
     id: Optional[str] = None  # optional identifier for session-managed entries
+
+
+def _resolve_account(value: Optional[str], default: Optional[str]) -> Optional[str]:
+    if value:
+        cleaned = value.strip()
+        if cleaned:
+            return cleaned
+    if default:
+        cleaned_default = default.strip()
+        if cleaned_default:
+            return cleaned_default
+    return None
 
 
 def _parse_date(value: str) -> dt.date:
@@ -68,7 +83,7 @@ _CREDIT_COLS = ("credit", "deposit")
 _ACCOUNT_COLS = ("account", "account name", "account number")
 
 
-def _load_csv_reader(reader: csv.DictReader, source_name: str) -> List[Transaction]:
+def _load_csv_reader(reader: csv.DictReader, source_name: str, default_account: Optional[str] = None) -> List[Transaction]:
     fieldnames = reader.fieldnames or []
     date_col = _find_column(fieldnames, _DATE_COLS)
     desc_col = _find_column(fieldnames, _DESC_COLS)
@@ -96,31 +111,32 @@ def _load_csv_reader(reader: csv.DictReader, source_name: str) -> List[Transacti
             c = _to_float(credit) if credit not in (None, "") else 0.0
             amount = c - d  # credit positive, debit negative
 
-        account = (row.get(account_col) or None) if account_col else None
+        account = row.get(account_col) if account_col else None
+        account = _resolve_account(account, default_account or DEFAULT_ACCOUNT)
         txns.append(Transaction(date=date, description=description, amount=amount, account=account))
     return txns
 
 
-def load_csv_file(path: str | Path) -> List[Transaction]:
+def load_csv_file(path: str | Path, default_account: Optional[str] = None) -> List[Transaction]:
     p = Path(path)
     with p.open("r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
-        return _load_csv_reader(reader, p.name)
+        return _load_csv_reader(reader, p.name, default_account)
 
 
-def load_csv_stream(handle: TextIO, label: str = "<upload>") -> List[Transaction]:
+def load_csv_stream(handle: TextIO, label: str = "<upload>", default_account: Optional[str] = None) -> List[Transaction]:
     current_pos = handle.tell() if handle.seekable() else None
     if current_pos is not None:
         handle.seek(0)
     reader = csv.DictReader(handle)
-    txns = _load_csv_reader(reader, label)
+    txns = _load_csv_reader(reader, label, default_account)
     return txns
 
 
-def load_csv_files(paths: Iterable[str | Path]) -> List[Transaction]:
+def load_csv_files(paths: Iterable[str | Path], default_account: Optional[str] = None) -> List[Transaction]:
     all_txns: List[Transaction] = []
     for p in paths:
-        all_txns.extend(load_csv_file(p))
+        all_txns.extend(load_csv_file(p, default_account=default_account))
     # Sort by date ascending
     all_txns.sort(key=lambda t: (t.date, t.description, t.amount))
     return all_txns

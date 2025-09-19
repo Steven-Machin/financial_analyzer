@@ -148,7 +148,8 @@
       font-size: 0.95rem;
     }
     .transaction-form,
-    .budget-form {
+    .budget-form,
+    .account-form {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
       gap: 1rem;
@@ -156,13 +157,15 @@
       margin-top: 1.1rem;
     }
     .transaction-form .field,
-    .budget-form .field {
+    .budget-form .field,
+    .account-form .field {
       display: flex;
       flex-direction: column;
       gap: 0.4rem;
     }
     .transaction-form label,
-    .budget-form label {
+    .budget-form label,
+    .account-form label {
       font-size: 0.8rem;
       font-weight: 600;
       text-transform: uppercase;
@@ -171,7 +174,9 @@
     }
     .transaction-form input,
     .transaction-form select,
-    .budget-form input {
+    .budget-form input,
+    .account-form input,
+    .account-form select {
       border: 1px solid #cbd2ea;
       border-radius: 8px;
       padding: 0.55rem 0.65rem;
@@ -205,6 +210,9 @@
       font-size: 0.9rem;
       transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     }
+    .secondary-button:hover {
+      background: #f0f4ff;
+    }
     .danger-button {
       border-color: #f87171;
       color: #c81e1e;
@@ -226,6 +234,60 @@
       gap: 0.8rem;
       flex-wrap: wrap;
       margin-top: 1.2rem;
+    }
+    .account-list {
+      margin-top: 1.2rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+    .account-list-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.5rem 0.8rem;
+      border: 1px solid #e4e7f5;
+      border-radius: 8px;
+      background: #f9faff;
+    }
+    .account-list-item span {
+      font-weight: 600;
+    }
+    .account-list-item small {
+      color: #6b7285;
+      font-size: 0.8rem;
+    }
+    .accounts-summary {
+      margin-bottom: 3rem;
+    }
+    .accounts-summary .totals {
+      margin-bottom: 1.5rem;
+    }
+    .accounts-table {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+      padding: 1.3rem 1.5rem 1.6rem;
+    }
+    .accounts-table table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 1rem;
+    }
+    .accounts-table th,
+    .accounts-table td {
+      padding: 0.65rem 0.8rem;
+      text-align: left;
+      font-size: 0.9rem;
+    }
+    .accounts-table thead {
+      background: #eef1fb;
+    }
+    .accounts-table tbody tr:nth-child(even) {
+      background: #f8f9fe;
+    }
+    .account-row.is-selected {
+      background: #f0f5ff;
     }
     .transaction-table {
       background: #fff;
@@ -355,7 +417,8 @@
         padding: 1rem 1.1rem;
       }
       .transaction-form,
-      .budget-form {
+      .budget-form,
+      .account-form {
         grid-template-columns: 1fr;
       }
       table td.actions {
@@ -465,8 +528,12 @@
               <input id="txn-amount" type="number" step="0.01" min="0" name="amount" value="{{ manual_form.amount }}" placeholder="0.00" required>
             </div>
             <div class="field">
-              <label for="txn-account">Account (optional)</label>
-              <input id="txn-account" type="text" name="account" value="{{ manual_form.account }}" placeholder="Checking, credit card, cash...">
+              <label for="txn-account">Account</label>
+              <select id="txn-account" name="account">
+                {% for account in accounts_list %}
+                <option value="{{ account }}" {% if manual_form.account == account %}selected{% endif %}>{{ account }}</option>
+                {% endfor %}
+              </select>
             </div>
             <div class="field">
               <button type="submit" class="primary-button">{% if form_mode == 'edit' %}Save Changes{% else %}Add Transaction{% endif %}</button>
@@ -491,7 +558,18 @@
               <label class="filter-label" for="csv-file">CSV File</label>
               <input id="csv-file" type="file" name="csv_file" accept=".csv" required>
             </div>
-            <button type="submit" class="primary-button">Import Transactions</button>
+            <div class="field">
+              <label for="upload-account">Assign Missing Accounts</label>
+              <select id="upload-account" name="upload_account">
+                <option value="detect" {% if upload_account_choice == 'detect' %}selected{% endif %}>Use CSV data or Checking</option>
+                {% for account in accounts_list %}
+                <option value="{{ account }}" {% if upload_account_choice == account %}selected{% endif %}>Assign to {{ account }}</option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="field">
+              <button type="submit" class="primary-button">Import Transactions</button>
+            </div>
           </form>
           <div class="import-actions">
             <form method="post">
@@ -530,6 +608,92 @@
             </div>
           </form>
         </div>
+        <div class="card accounts-card">
+          <h2>Accounts</h2>
+          <p>Organize the accounts used for manual entries and imports. Remove accounts with no transactions.</p>
+          <form class="account-form" method="post">
+            <input type="hidden" name="action" value="add_account">
+            {% for path in inputs %}
+            <input type="hidden" name="input" value="{{ path }}">
+            {% endfor %}
+            {% for name, value in filter_form_values.items() %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {% endfor %}
+            <div class="field">
+              <label for="account-name">Account Name</label>
+              <input id="account-name" type="text" name="account_name" placeholder="Checking, Savings, Credit Card" required>
+            </div>
+            <div class="field">
+              <button type="submit" class="primary-button">Add Account</button>
+            </div>
+          </form>
+          <div class="account-list">
+            {% for account in account_management %}
+            <div class="account-list-item">
+              <div>
+                <span>{{ account.name }}</span>
+                {% if account.in_use %}
+                <small>In use</small>
+                {% endif %}
+              </div>
+              {% if account.can_delete %}
+              <form method="post" class="inline-form">
+                <input type="hidden" name="action" value="delete_account">
+                <input type="hidden" name="account_name" value="{{ account.name }}">
+                {% for path in inputs %}
+                <input type="hidden" name="input" value="{{ path }}">
+                {% endfor %}
+                {% for name, value in filter_form_values.items() %}
+                <input type="hidden" name="{{ name }}" value="{{ value }}">
+                {% endfor %}
+                <button type="submit" class="link-button">Delete</button>
+              </form>
+              {% endif %}
+            </div>
+            {% endfor %}
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="accounts-summary" id="accounts">
+      <h2>Accounts Overview</h2>
+      <p class="section-help">Totals combine all data, while the current view reflects filters like range and account selection.</p>
+      <div class="totals accounts-totals">
+        <div class="card">
+          <h3>All Accounts Income</h3>
+          <strong>${{ '%0.2f'|format(overall_totals_all.income) }}</strong>
+        </div>
+        <div class="card">
+          <h3>All Accounts Expenses</h3>
+          <strong>${{ '%0.2f'|format(overall_totals_all.expense) }}</strong>
+        </div>
+        <div class="card">
+          <h3>All Accounts Net</h3>
+          <strong>${{ '%0.2f'|format(overall_totals_all.net) }}</strong>
+        </div>
+      </div>
+      <div class="accounts-table">
+        <table aria-label="Account balances">
+          <thead>
+            <tr><th>Account</th><th>Income (All)</th><th>Expense (All)</th><th>Net (All)</th><th>Income (View)</th><th>Expense (View)</th><th>Net (View)</th></tr>
+          </thead>
+          <tbody>
+            {% for row in account_rows %}
+            <tr class="account-row{% if row.is_selected %} is-selected{% endif %}">
+              <td>{{ row.name }}</td>
+              <td>${{ '%0.2f'|format(row.all_income) }}</td>
+              <td>${{ '%0.2f'|format(row.all_expense) }}</td>
+              <td>${{ '%0.2f'|format(row.all_net) }}</td>
+              <td>{% if row.view_income is not none %}${{ '%0.2f'|format(row.view_income) }}{% else %}--{% endif %}</td>
+              <td>{% if row.view_expense is not none %}${{ '%0.2f'|format(row.view_expense) }}{% else %}--{% endif %}</td>
+              <td>{% if row.view_net is not none %}${{ '%0.2f'|format(row.view_net) }}{% else %}--{% endif %}</td>
+            </tr>
+            {% else %}
+            <tr><td colspan="7">No account activity yet.</td></tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
     </section>
 

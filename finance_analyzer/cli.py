@@ -14,7 +14,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .config import AppConfig
-from .data_loader import load_csv_files, Transaction
+from .data_loader import DEFAULT_ACCOUNT, Transaction, load_csv_files
 from .categorizer import categorize_transactions
 from .reports import build_summary, format_text_report, save_json
 
@@ -39,7 +39,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     args = parse_args(argv)
 
     cfg = AppConfig.load(args.config)
-    txns = load_csv_files(args.input)
+    txns = load_csv_files(args.input, default_account=DEFAULT_ACCOUNT)
 
     # Optional date filtering
     dfrom = _parse_date(args.date_from)

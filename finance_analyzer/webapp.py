@@ -4,12 +4,13 @@ import datetime as dt
 import io
 import uuid
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence
 
 from flask import Flask, jsonify, redirect, render_template, request, session, url_for
 
+from .analytics import summarize_income_expense
 from .config import AppConfig
-from .data_loader import Transaction, load_csv_files, load_csv_stream
+from .data_loader import DEFAULT_ACCOUNT, Transaction, load_csv_files, load_csv_stream
 from .categorizer import categorize_transactions
 from .reports import build_summary
 
@@ -27,6 +28,7 @@ DEFAULT_RANGE = "last_3"
 
 SESSION_TRANSACTIONS = "pfa_transactions"
 SESSION_BUDGETS = "pfa_budgets"
+SESSION_ACCOUNTS = "pfa_accounts"
 
 
 def _resolve_paths(paths: List[str]) -> List[Path]:
@@ -115,10 +117,14 @@ def _parse_filters(data) -> Dict[str, str]:
     }
 
 
-def _filters_for_redirect(filters: Dict[str, str], inputs: Sequence[str], extra: Optional[Dict[str, str]] = None):
-    params: Dict[str, object] = {}
+def _filters_for_redirect(
+    filters: Dict[str, str],
+    inputs: Sequence[str],
+    extra: Optional[Dict[str, Optional[str]]] = None,
+) -> Dict[str, str]:
+    params: Dict[str, str] = {}
     if inputs:
-        params["input"] = list(inputs)
+        params.setdefault("input", list(inputs))
     if filters.get("category") and filters["category"] not in {"", "all"}:
         params["category"] = filters["category"]
     if filters.get("account") and filters["account"] not in {"", "all"}:
@@ -131,11 +137,19 @@ def _filters_for_redirect(filters: Dict[str, str], inputs: Sequence[str], extra:
         if filters.get("end"):
             params["end"] = filters["end"]
     if extra:
-        params.update(extra)
+        for key, value in extra.items():
+            if value in (None, "", "all"):
+                params.pop(key, None)
+            else:
+                params[key] = value
     return params
 
 
-def _redirect_to_index(filters: Dict[str, str], inputs: Sequence[str], extra: Optional[Dict[str, str]] = None):
+def _redirect_to_index(
+    filters: Dict[str, str],
+    inputs: Sequence[str],
+    extra: Optional[Dict[str, Optional[str]]] = None,
+):
     params = _filters_for_redirect(filters, inputs, extra)
     return redirect(url_for("index", **params))
 
@@ -147,6 +161,56 @@ def _safe_parse_date(value: str) -> Optional[dt.date]:
         return dt.date.fromisoformat(value)
     except ValueError:
         return None
+
+
+def _normalize_account_name(value: Optional[str]) -> str:
+    if value is None:
+        return DEFAULT_ACCOUNT
+    name = str(value).strip()
+    return name or DEFAULT_ACCOUNT
+
+
+def _sort_accounts(accounts: Sequence[str]) -> List[str]:
+    ordered: List[str] = []
+    for name in accounts:
+        normalized = _normalize_account_name(name)
+        if normalized not in ordered:
+            ordered.append(normalized)
+    if DEFAULT_ACCOUNT in ordered:
+        others = sorted(x for x in ordered if x != DEFAULT_ACCOUNT)
+        return [DEFAULT_ACCOUNT, *others]
+    return sorted(ordered)
+
+
+def _get_session_accounts() -> List[str]:
+    raw = session.get(SESSION_ACCOUNTS, [])
+    accounts: List[str] = []
+    if isinstance(raw, list):
+        for item in raw:
+            if isinstance(item, str):
+                normalized = _normalize_account_name(item)
+                if normalized not in accounts:
+                    accounts.append(normalized)
+    if DEFAULT_ACCOUNT not in accounts:
+        accounts.insert(0, DEFAULT_ACCOUNT)
+    session[SESSION_ACCOUNTS] = accounts
+    return accounts
+
+
+def _store_session_accounts(accounts: Sequence[str]) -> None:
+    cleaned = _sort_accounts(accounts)
+    if DEFAULT_ACCOUNT not in cleaned:
+        cleaned.insert(0, DEFAULT_ACCOUNT)
+    session[SESSION_ACCOUNTS] = cleaned
+
+
+def _ensure_account(name: Optional[str]) -> str:
+    account = _normalize_account_name(name)
+    accounts = _get_session_accounts()
+    if account not in accounts:
+        accounts.append(account)
+        _store_session_accounts(accounts)
+    return account
 
 
 def _apply_filters(txns: List[Transaction], filters: Dict[str, str]) -> List[Transaction]:
@@ -175,7 +239,7 @@ def _apply_filters(txns: List[Transaction], filters: Dict[str, str]) -> List[Tra
 
     account_filter = filters.get("account")
     if account_filter and account_filter not in {"", "all"}:
-        filtered = [t for t in filtered if (t.account or "Unspecified") == account_filter]
+        filtered = [t for t in filtered if _normalize_account_name(t.account) == account_filter]
 
     return filtered
 
@@ -288,6 +352,26 @@ def _compose_data_source_label(counts: Dict[str, int]) -> str:
     return " + ".join(parts) if parts else "No data yet"
 
 
+def _compute_account_balances(txns: Sequence[Transaction], account_order: Sequence[str]) -> Dict[str, Dict[str, float]]:
+    balances: Dict[str, Dict[str, float]] = {
+        _normalize_account_name(name): {"income": 0.0, "expense": 0.0, "net": 0.0}
+        for name in account_order
+    }
+    for txn in txns:
+        account = _normalize_account_name(txn.account)
+        stats = balances.setdefault(account, {"income": 0.0, "expense": 0.0, "net": 0.0})
+        if txn.amount >= 0:
+            stats["income"] += txn.amount
+        else:
+            stats["expense"] += -txn.amount
+        stats["net"] = stats["income"] - stats["expense"]
+    for stats in balances.values():
+        stats["income"] = round(stats["income"], 2)
+        stats["expense"] = round(stats["expense"], 2)
+        stats["net"] = round(stats["net"], 2)
+    return balances
+
+
 def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional[str] = None) -> Flask:
     app = Flask(
         __name__,
@@ -306,49 +390,53 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         filters = _parse_filters(request.form if request.method == "POST" else request.args)
         errors: List[str] = []
 
+        session_accounts = _get_session_accounts()
         transactions_entries = _get_session_transactions()
         session_budgets = _get_session_budgets()
 
-        form_data = {
+        manual_form = {
             "date": "",
             "description": "",
             "amount": "",
-            "account": "",
+            "account": session_accounts[0],
             "kind": "expense",
         }
+        budget_form = {"category": "", "limit": ""}
         form_mode = "add"
         edit_id = request.args.get("edit") if request.method == "GET" else None
-        budget_form = {"category": "", "limit": ""}
+        upload_account_choice = request.form.get("upload_account") if request.method == "POST" else "detect"
+        upload_account_choice = upload_account_choice or "detect"
 
         if request.method == "POST":
             action = request.form.get("action", "")
+
             if action in {"add_manual", "save_edit"}:
-                form_data = {
+                manual_form = {
                     "date": (request.form.get("date") or "").strip(),
                     "description": (request.form.get("description") or "").strip(),
                     "amount": (request.form.get("amount") or "").strip(),
-                    "account": (request.form.get("account") or "").strip(),
+                    "account": (request.form.get("account") or session_accounts[0]).strip(),
                     "kind": request.form.get("kind", "expense"),
                 }
-                tx_type = form_data.get("kind")
+                tx_type = manual_form.get("kind")
                 if tx_type not in {"income", "expense"}:
                     tx_type = "expense"
 
-                if not form_data["date"]:
+                if not manual_form["date"]:
                     errors.append("Date is required.")
-                if not form_data["description"]:
+                if not manual_form["description"]:
                     errors.append("Description is required.")
-                if not form_data["amount"]:
+                if not manual_form["amount"]:
                     errors.append("Amount is required.")
 
                 try:
-                    date_value = dt.date.fromisoformat(form_data["date"])
+                    date_value = dt.date.fromisoformat(manual_form["date"])
                 except ValueError:
                     date_value = None
                     errors.append("Date must be in YYYY-MM-DD format.")
 
                 try:
-                    amount_value = float(form_data["amount"])
+                    amount_value = float(manual_form["amount"])
                 except ValueError:
                     amount_value = None
                     errors.append("Amount must be a valid number.")
@@ -359,15 +447,18 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                 if amount_value is not None:
                     amount_value = abs(amount_value) if tx_type == "income" else -abs(amount_value)
 
+                account_value = _ensure_account(manual_form["account"])
+                manual_form["account"] = account_value
+
                 if not errors and date_value and amount_value is not None:
                     if action == "add_manual":
                         transactions_entries.append(
                             {
                                 "id": uuid.uuid4().hex,
                                 "date": date_value.isoformat(),
-                                "description": form_data["description"],
+                                "description": manual_form["description"],
                                 "amount": amount_value,
-                                "account": form_data["account"] or "",
+                                "account": account_value,
                                 "kind": "income" if amount_value >= 0 else "expense",
                                 "source": "manual",
                             }
@@ -383,9 +474,9 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                                 entry.update(
                                     {
                                         "date": date_value.isoformat(),
-                                        "description": form_data["description"],
+                                        "description": manual_form["description"],
                                         "amount": amount_value,
-                                        "account": form_data["account"] or "",
+                                        "account": account_value,
                                         "kind": "income" if amount_value >= 0 else "expense",
                                     }
                                 )
@@ -399,6 +490,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                 else:
                     if action == "save_edit":
                         edit_id = request.form.get("transaction_id") or None
+                        form_mode = "edit"
 
             elif action == "delete_transaction":
                 target_id = request.form.get("transaction_id") or ""
@@ -418,26 +510,34 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                 if not file or not file.filename:
                     errors.append("Please choose a CSV file to upload.")
                 else:
+                    choice = upload_account_choice or "detect"
+                    chosen_account = None if choice == "detect" else _ensure_account(choice)
                     try:
-                        text = file.read().decode("utf-8-sig")
+                        text_stream = file.read().decode("utf-8-sig")
                     except UnicodeDecodeError:
                         errors.append("Unable to decode the uploaded file. Ensure it is UTF-8 encoded.")
                     else:
-                        stream = io.StringIO(text)
+                        stream = io.StringIO(text_stream)
                         try:
-                            uploaded_txns = load_csv_stream(stream, label=file.filename)
+                            uploaded_txns = load_csv_stream(
+                                stream,
+                                label=file.filename,
+                                default_account=chosen_account or DEFAULT_ACCOUNT,
+                            )
                         except ValueError as exc:
                             errors.append(str(exc))
                         else:
                             new_entries = []
                             for txn in uploaded_txns:
+                                account_value = txn.account or chosen_account or DEFAULT_ACCOUNT
+                                account_value = _ensure_account(account_value)
                                 new_entries.append(
                                     {
                                         "id": uuid.uuid4().hex,
                                         "date": txn.date.isoformat(),
                                         "description": txn.description,
                                         "amount": txn.amount,
-                                        "account": txn.account or "",
+                                        "account": account_value,
                                         "kind": "income" if txn.amount >= 0 else "expense",
                                         "source": "upload",
                                         "label": file.filename,
@@ -476,17 +576,65 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                 else:
                     errors.append("Unable to remove the selected budget.")
 
+            elif action == "add_account":
+                account_name = (request.form.get("account_name") or "").strip()
+                if not account_name:
+                    errors.append("Account name is required.")
+                else:
+                    normalized = _normalize_account_name(account_name)
+                    accounts = _get_session_accounts()
+                    if normalized in accounts:
+                        errors.append("That account already exists.")
+                    else:
+                        accounts.append(normalized)
+                        _store_session_accounts(accounts)
+                        manual_form["account"] = normalized
+                        return _redirect_to_index(filters, inputs)
+
+            elif action == "delete_account":
+                target_account = (request.form.get("account_name") or "").strip()
+                normalized = _normalize_account_name(target_account)
+                accounts = _get_session_accounts()
+                if normalized == DEFAULT_ACCOUNT:
+                    errors.append("Cannot delete the default account.")
+                elif normalized not in accounts:
+                    errors.append("Unable to find the selected account.")
+                else:
+                    in_use_session = any(
+                        _normalize_account_name(entry.get("account")) == normalized for entry in transactions_entries
+                    )
+                    in_use_files = False
+                    if inputs and not in_use_session:
+                        try:
+                            preview_txns = load_csv_files(_resolve_paths(inputs), default_account=DEFAULT_ACCOUNT)
+                        except ValueError:
+                            preview_txns = []
+                        in_use_files = any(_normalize_account_name(txn.account) == normalized for txn in preview_txns)
+                    if in_use_session or in_use_files:
+                        errors.append("Cannot delete an account that has transactions.")
+                    elif len(accounts) <= 1:
+                        errors.append("At least one account must remain.")
+                    else:
+                        remaining = [acc for acc in accounts if acc != normalized]
+                        _store_session_accounts(remaining)
+                        if filters.get("account") == normalized:
+                            filters["account"] = "all"
+                        if manual_form.get("account") == normalized:
+                            manual_form["account"] = remaining[0]
+                        return _redirect_to_index(filters, inputs)
+
         transactions_entries = _get_session_transactions()
+        session_accounts = _get_session_accounts()
         session_budgets = _get_session_budgets()
 
         if request.method == "GET" and edit_id:
             for entry in transactions_entries:
                 if entry.get("id") == edit_id:
-                    form_data = {
+                    manual_form = {
                         "date": entry.get("date", ""),
                         "description": entry.get("description", ""),
                         "amount": str(abs(float(entry.get("amount", 0)))),
-                        "account": entry.get("account", ""),
+                        "account": entry.get("account", session_accounts[0]),
                         "kind": entry.get("kind", "expense"),
                     }
                     form_mode = "edit"
@@ -494,16 +642,15 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             else:
                 edit_id = None
 
-        if request.method == "POST" and request.form.get("action") == "save_edit" and errors:
-            edit_id = request.form.get("transaction_id") or None
-            form_mode = "edit"
+        if manual_form.get("account") not in session_accounts:
+            manual_form["account"] = session_accounts[0]
 
         session_txns = _entries_to_transactions(transactions_entries)
         resolved_inputs = _resolve_paths(inputs) if inputs else []
         file_txns: List[Transaction] = []
         if resolved_inputs:
             try:
-                file_txns = load_csv_files(resolved_inputs)
+                file_txns = load_csv_files(resolved_inputs, default_account=DEFAULT_ACCOUNT)
             except ValueError as exc:
                 errors.append(str(exc))
         all_txns: List[Transaction] = []
@@ -512,18 +659,20 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         if all_txns:
             all_txns.sort(key=lambda t: (t.date, t.description, t.amount))
 
+        for txn in all_txns:
+            _ensure_account(txn.account)
+
+        session_accounts = _get_session_accounts()
+
+        available_categories = sorted({t.category or "Other" for t in all_txns}) if all_txns else []
+        available_accounts = _sort_accounts(list(session_accounts) + [_normalize_account_name(t.account) for t in all_txns])
+        if filters.get("account") not in {"all", ""} | set(available_accounts):
+            filters["account"] = "all"
+
         resolved_config = _resolve_config_path(config_path)
         cfg = AppConfig.load(resolved_config)
         if all_txns:
             categorize_transactions(all_txns, cfg.rules)
-
-        available_categories = sorted({t.category or "Other" for t in all_txns}) if all_txns else []
-        account_values = {t.account or "Unspecified" for t in all_txns}
-        if "Unspecified" in account_values:
-            account_values = sorted(account_values - {"Unspecified"})
-            available_accounts = ["Unspecified"] + account_values
-        else:
-            available_accounts = sorted(account_values)
 
         filtered_txns = _apply_filters(all_txns, filters)
 
@@ -535,8 +684,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         summary["transaction_count"] = len(filtered_txns)
 
         session_index = {str(entry.get("id")): entry for entry in transactions_entries}
-        transaction_rows = []
-        transaction_rows = []
+        transaction_rows: List[Dict[str, object]] = []
         for txn in filtered_txns:
             entry_id = str(getattr(txn, "id", None))
             entry = session_index.get(entry_id)
@@ -557,6 +705,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                         "edit_url": url_for("index", **edit_params),
                     }
                 )
+
         counts = _classify_session_counts(transactions_entries)
         data_source_label = _compose_data_source_label(counts)
 
@@ -568,8 +717,8 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             "end": filters.get("end", ""),
         }
 
-        cancel_edit_url = url_for("index", **_filters_for_redirect(filters, inputs))
-        range_label = _range_display(filters)
+        cancel_edit_url = url_for("index", **_filters_for_redirect(filters, inputs, {"edit": None}))
+        range_label = RANGE_LABELS.get(filters.get("range", DEFAULT_RANGE), RANGE_LABELS[DEFAULT_RANGE])
         chart_title = f"Spending by Category ({range_label})"
 
         budget_rows = []
@@ -599,9 +748,58 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                 }
             )
 
+        account_order = list(session_accounts)
+        for txn in all_txns:
+            account_name = _normalize_account_name(txn.account)
+            if account_name not in account_order:
+                account_order.append(account_name)
+        account_order = _sort_accounts(account_order)
+        _store_session_accounts(account_order)
+
+        account_balances_all = _compute_account_balances(all_txns, account_order)
+        account_balances_view = _compute_account_balances(filtered_txns, account_order)
+        selected_account = filters.get("account", "all")
+        account_rows = []
+        for account in account_order:
+            overall = account_balances_all.get(account, {"income": 0.0, "expense": 0.0, "net": 0.0})
+            view_stats = account_balances_view.get(account)
+            account_rows.append(
+                {
+                    "name": account,
+                    "all_income": overall["income"],
+                    "all_expense": overall["expense"],
+                    "all_net": overall["net"],
+                    "view_income": view_stats["income"] if view_stats else None,
+                    "view_expense": view_stats["expense"] if view_stats else None,
+                    "view_net": view_stats["net"] if view_stats else None,
+                    "is_selected": selected_account == account,
+                }
+            )
+
+        overall_totals_all = summarize_income_expense(all_txns) if all_txns else {"income": 0.0, "expense": 0.0, "net": 0.0}
+
+        account_usage: Dict[str, int] = {acc: 0 for acc in account_order}
+        for txn in all_txns:
+            account_name = _normalize_account_name(txn.account)
+            account_usage[account_name] = account_usage.get(account_name, 0) + 1
+        for entry in transactions_entries:
+            account_name = _normalize_account_name(entry.get("account"))
+            account_usage[account_name] = account_usage.get(account_name, 0) + 1
+        account_management = []
+        for account in account_order:
+            in_use = account_usage.get(account, 0) > 0
+            account_management.append(
+                {
+                    "name": account,
+                    "in_use": in_use,
+                    "can_delete": account != DEFAULT_ACCOUNT and not in_use,
+                }
+            )
+
         return render_template(
             "index.html",
             summary=summary,
+            overall_totals_all=overall_totals_all,
             inputs=inputs,
             filters=filters,
             filter_form_values=filter_form_values,
@@ -611,7 +809,10 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             transaction_rows=transaction_rows,
             available_categories=available_categories,
             available_accounts=available_accounts,
-            manual_form=form_data,
+            accounts_list=session_accounts,
+            account_rows=account_rows,
+            account_management=account_management,
+            manual_form=manual_form,
             form_mode=form_mode,
             edit_id=edit_id,
             errors=errors,
@@ -620,6 +821,8 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             session_budgets=session_budgets,
             budget_form=budget_form,
             cancel_edit_url=cancel_edit_url,
+            upload_account_choice=upload_account_choice,
+            selected_account=selected_account,
         )
 
     @app.route("/api/summary")
@@ -628,16 +831,21 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         filters = _parse_filters(request.args)
 
         resolved_inputs = _resolve_paths(inputs) if inputs else []
-        file_txns: List[Transaction] = []
-        if resolved_inputs:
-            file_txns = load_csv_files(resolved_inputs)
-
+        file_txns = load_csv_files(resolved_inputs, default_account=DEFAULT_ACCOUNT) if resolved_inputs else []
         session_txns = _entries_to_transactions(_get_session_transactions())
         all_txns: List[Transaction] = []
         all_txns.extend(file_txns)
         all_txns.extend(session_txns)
         if all_txns:
             all_txns.sort(key=lambda t: (t.date, t.description, t.amount))
+
+        for txn in all_txns:
+            _ensure_account(txn.account)
+
+        session_accounts = _get_session_accounts()
+        available_accounts = _sort_accounts(list(session_accounts) + [_normalize_account_name(t.account) for t in all_txns])
+        if filters.get("account") not in {"all", ""} | set(available_accounts):
+            filters["account"] = "all"
 
         resolved_config = _resolve_config_path(config_path)
         cfg = AppConfig.load(resolved_config)
@@ -653,7 +861,14 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         summary["date_range"] = _format_range_metadata(filtered_txns)
         summary["transaction_count"] = len(filtered_txns)
         summary["filters"] = filters
-        summary["range_label"] = _range_display(filters)
+        summary["range_label"] = RANGE_LABELS.get(filters.get("range", DEFAULT_RANGE), RANGE_LABELS[DEFAULT_RANGE])
+
+        account_balances_all = _compute_account_balances(all_txns, available_accounts)
+        account_balances_view = _compute_account_balances(filtered_txns, available_accounts)
+        summary["accounts_all"] = account_balances_all
+        summary["accounts_view"] = account_balances_view
+        summary["available_accounts"] = available_accounts
+
         return jsonify(summary)
 
     return app
