@@ -378,7 +378,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         template_folder=str(PACKAGE_ROOT / "templates"),
         static_folder=str(PACKAGE_ROOT / "static"),
     )
-    app.config.setdefault("SECRET_KEY", "dev-secret-key")
+    app.config["SECRET_KEY"] = "fl99032"
 
     default_inputs = default_inputs or []
 
