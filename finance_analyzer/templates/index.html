@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -13,7 +13,7 @@
     }
     body { margin: 0; }
     .page {
-      max-width: 1100px;
+      max-width: 1200px;
       margin: 0 auto;
       padding: 2.5rem 1.5rem 4rem;
     }
@@ -27,150 +27,276 @@
     }
     .inputs-note {
       font-size: 0.9rem;
-      margin-bottom: 0.5rem;
+      margin-bottom: 0.75rem;
     }
     .controls {
       display: flex;
-      flex-wrap: wrap;
-      align-items: center;
-      gap: 1rem;
-      margin: 1.2rem 0 2rem;
-    }
-    .date-range {
-      font-weight: 600;
-      color: #2a3d66;
-    }
-    .window-form {
-      display: inline-flex;
-      flex-wrap: wrap;
-      gap: 0.5rem;
-      align-items: center;
-    }
-    .window-label {
-      font-size: 0.9rem;
-      color: #555;
-    }
-    .window-form button {
-      border: 1px solid #cbd2ea;
-      background: #fff;
-      color: #2a3d66;
-      padding: 0.45rem 0.9rem;
-      border-radius: 999px;
-      cursor: pointer;
-      font-size: 0.9rem;
-      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
-    }
-    .window-form button:hover {
-      background: #2a3d66;
-      color: #fff;
-    }
-    .window-form button.active {
-      background: #365feb;
-      border-color: #365feb;
-      color: #fff;
-      box-shadow: 0 6px 20px rgba(54, 95, 235, 0.25);
-    }
-
-    .manual-card {
-      background: #fff;
-      border-radius: 12px;
-      padding: 1.5rem;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
-      margin-bottom: 2.5rem;
-    }
-    .transaction-form {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-      gap: 1rem;
-      align-items: end;
-    }
-    .transaction-form .field-group {
-      display: flex;
       flex-direction: column;
-      gap: 0.4rem;
+      gap: 1.25rem;
+      margin: 1.5rem 0 2.5rem;
     }
-    .transaction-form label {
-      font-size: 0.85rem;
-      color: #52607c;
+    .filter-form {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem 1.5rem;
+      align-items: flex-end;
+      background: #fff;
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+    }
+    .filter-form fieldset {
+      border: none;
+      margin: 0;
+      padding: 0;
+      min-width: 160px;
+    }
+    .filter-form legend,
+    .filter-label {
+      font-size: 0.8rem;
       font-weight: 600;
-      text-transform: uppercase;
       letter-spacing: 0.05em;
+      text-transform: uppercase;
+      color: #52607c;
+      margin-bottom: 0.35rem;
+      display: block;
     }
-    .transaction-form input,
-    .transaction-form select {
+    .filter-form select,
+    .filter-form input[type="date"],
+    .filter-form input[type="text"] {
       border: 1px solid #cbd2ea;
       border-radius: 8px;
       padding: 0.55rem 0.65rem;
       font-size: 0.95rem;
       background: #fdfdff;
+      min-width: 160px;
     }
-    .transaction-form button {
-      border: none;
-      background: #365feb;
-      color: #fff;
-      padding: 0.65rem 1.2rem;
+    .range-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+    .range-buttons button {
+      border: 1px solid #cbd2ea;
+      background: #fff;
+      color: #2a3d66;
+      padding: 0.45rem 0.95rem;
       border-radius: 999px;
       cursor: pointer;
-      font-size: 0.95rem;
-      box-shadow: 0 6px 20px rgba(54, 95, 235, 0.25);
-      transition: background 0.2s ease, box-shadow 0.2s ease;
+      font-size: 0.9rem;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
     }
-    .transaction-form button:hover {
+    .range-buttons button:hover {
       background: #2a3d66;
-      box-shadow: 0 10px 24px rgba(42, 61, 102, 0.3);
+      color: #fff;
+    }
+    .range-buttons button.active {
+      background: #365feb;
+      border-color: #365feb;
+      color: #fff;
+      box-shadow: 0 6px 20px rgba(54, 95, 235, 0.25);
+    }
+    .date-inputs {
+      display: flex;
+      gap: 0.75rem;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+    .date-inputs .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+    .date-inputs small {
+      font-size: 0.75rem;
+      color: #6b7285;
+    }
+    .data-entry {
+      margin-bottom: 3rem;
     }
     .form-errors {
       background: #ffe8e6;
       border: 1px solid #f5b1ac;
       color: #8a1f17;
       border-radius: 8px;
-      padding: 0.75rem 1rem;
-      margin-bottom: 1rem;
+      padding: 0.85rem 1.1rem;
+      margin-bottom: 1.2rem;
     }
     .form-errors ul {
       margin: 0;
       padding-left: 1.2rem;
     }
-    .manual-actions {
+    .entry-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1.5rem;
+    }
+    .card {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+      padding: 1.6rem;
+    }
+    .card h2 {
+      margin-top: 0;
+      margin-bottom: 0.6rem;
+      font-size: 1.4rem;
+    }
+    .card p {
+      margin-top: 0;
+      color: #6b7285;
+      font-size: 0.95rem;
+    }
+    .transaction-form,
+    .budget-form {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 1rem;
+      align-items: end;
+      margin-top: 1.1rem;
+    }
+    .transaction-form .field,
+    .budget-form .field {
       display: flex;
-      justify-content: space-between;
-      align-items: center;
-      flex-wrap: wrap;
-      gap: 0.75rem;
-      margin-top: 1.25rem;
+      flex-direction: column;
+      gap: 0.4rem;
     }
-    .manual-actions form {
-      margin: 0;
+    .transaction-form label,
+    .budget-form label {
+      font-size: 0.8rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #52607c;
     }
-    .manual-actions button {
+    .transaction-form input,
+    .transaction-form select,
+    .budget-form input {
+      border: 1px solid #cbd2ea;
+      border-radius: 8px;
+      padding: 0.55rem 0.65rem;
+      font-size: 0.95rem;
+      background: #fdfdff;
+    }
+    .primary-button {
+      border: none;
+      background: #365feb;
+      color: #fff;
+      padding: 0.7rem 1.3rem;
+      border-radius: 999px;
+      cursor: pointer;
+      font-size: 0.95rem;
+      box-shadow: 0 10px 28px rgba(54, 95, 235, 0.25);
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+    .primary-button:hover {
+      background: #2a3d66;
+      box-shadow: 0 14px 32px rgba(42, 61, 102, 0.35);
+    }
+    .secondary-button,
+    .danger-button,
+    .link-button {
       border: 1px solid #cbd2ea;
       background: #fff;
       color: #2a3d66;
-      padding: 0.4rem 0.9rem;
+      padding: 0.45rem 0.95rem;
       border-radius: 999px;
       cursor: pointer;
-      font-size: 0.85rem;
+      font-size: 0.9rem;
+      transition: background 0.2s ease, color 0.2s ease, border-color 0.2s ease;
     }
-    .manual-actions button:hover {
-      background: #f0f4ff;
+    .danger-button {
+      border-color: #f87171;
+      color: #c81e1e;
     }
-    .manual-table {
+    .danger-button:hover {
+      background: #fef2f2;
+    }
+    .link-button {
+      border: none;
+      padding: 0;
+      background: none;
+      color: #c81e1e;
+    }
+    .link-button:hover {
+      text-decoration: underline;
+    }
+    .import-actions {
+      display: flex;
+      gap: 0.8rem;
+      flex-wrap: wrap;
+      margin-top: 1.2rem;
+    }
+    .transaction-table {
+      background: #fff;
+      border-radius: 14px;
+      box-shadow: 0 12px 32px rgba(0, 0, 0, 0.08);
+      padding: 1.4rem 1.6rem 1.6rem;
+      margin-bottom: 3rem;
+    }
+    .transaction-table h2 {
+      margin-top: 0;
+      font-size: 1.4rem;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
       margin-top: 1rem;
     }
-    .manual-table td.actions {
-      text-align: right;
+    table thead {
+      background: #eef1fb;
     }
-    .manual-table form button {
-      border: none;
-      background: #f87171;
-      color: #fff;
-      padding: 0.4rem 0.8rem;
-      border-radius: 6px;
-      cursor: pointer;
-      font-size: 0.85rem;
+    table th,
+    table td {
+      padding: 0.7rem 0.9rem;
+      text-align: left;
+      font-size: 0.95rem;
     }
-    .manual-table form button:hover {
-      background: #dc2626;
+    table tbody tr:nth-child(even) {
+      background: #f8f9fe;
+    }
+    table td.actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+      justify-content: flex-end;
+    }
+    .inline-form {
+      display: inline;
+    }
+    .edit-link {
+      color: #365feb;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .edit-link:hover {
+      text-decoration: underline;
+    }
+    .type.income {
+      color: #0b8235;
+      font-weight: 600;
+    }
+    .type.expense {
+      color: #b91c1c;
+      font-weight: 600;
+    }
+    .progress-track {
+      width: 100%;
+      height: 10px;
+      background: #e0e7ff;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #365feb, #5c7dff);
+    }
+    .budget-row.over td {
+      background: #fef2f2;
+      color: #991b1b;
+    }
+    .budget-row.over .progress-fill {
+      background: linear-gradient(90deg, #f97316, #ef4444);
     }
     section {
       margin: 3rem 0;
@@ -193,40 +319,19 @@
       gap: 1.2rem;
       margin-bottom: 2rem;
     }
-    .card {
-      background: #fff;
-      border-radius: 12px;
-      box-shadow: 0 10px 28px rgba(0, 0, 0, 0.08);
+    .totals .card {
       padding: 1.4rem 1.6rem;
     }
-    .card h3 {
+    .totals .card h3 {
       margin: 0 0 0.5rem;
       font-size: 1rem;
       text-transform: uppercase;
       letter-spacing: 0.08em;
       color: #6b7285;
     }
-    .card strong {
+    .totals .card strong {
       font-size: 1.7rem;
       display: block;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      background: #fff;
-      border-radius: 12px;
-      overflow: hidden;
-    }
-    table thead {
-      background: #eef1fb;
-    }
-    table th, table td {
-      padding: 0.7rem 1rem;
-      text-align: left;
-      font-size: 0.95rem;
-    }
-    table tbody tr:nth-child(even) {
-      background: #f8f9fe;
     }
     .chart-card {
       position: relative;
@@ -244,20 +349,18 @@
     }
     @media (max-width: 720px) {
       .controls {
-        flex-direction: column;
-        align-items: flex-start;
+        gap: 1.5rem;
       }
-      .window-form {
-        width: 100%;
+      .filter-form {
+        padding: 1rem 1.1rem;
       }
-      .window-form button {
-        flex: 1 0 auto;
-      }
-      .transaction-form {
+      .transaction-form,
+      .budget-form {
         grid-template-columns: 1fr;
       }
-      .transaction-form button {
-        width: 100%;
+      table td.actions {
+        flex-direction: column;
+        align-items: flex-start;
       }
     }
   </style>
@@ -269,122 +372,218 @@
       <h1>Personal Finance Analyzer</h1>
       <p class="inputs-note">Currently analyzing: {{ data_source_label }}</p>
       <div class="controls">
-        <p class="date-range">Currently analyzing data {{ summary.date_range.display }}</p>
-        <form class="window-form" method="get">
-          <span class="window-label">View:</span>
-          {% for option in window_options %}
-          <button type="submit" name="window" value="{{ option }}" class="{% if option == active_window %}active{% endif %}">
-            {% if option == 1 %}Last month{% elif option == 3 %}Last 3 months{% elif option == 6 %}Last 6 months{% else %}Last {{ option }} months{% endif %}
-          </button>
-          {% endfor %}
+        <form class="filter-form" method="get">
           {% for path in inputs %}
           <input type="hidden" name="input" value="{{ path }}">
           {% endfor %}
+          <div class="filter-group">
+            <span class="filter-label">Category</span>
+            <select name="category" onchange="this.form.submit()">
+              <option value="all" {% if filters.category == 'all' %}selected{% endif %}>All categories</option>
+              {% for cat in available_categories %}
+              <option value="{{ cat }}" {% if filters.category == cat %}selected{% endif %}>{{ cat }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="filter-group">
+            <span class="filter-label">Account</span>
+            <select name="account" onchange="this.form.submit()">
+              <option value="all" {% if filters.account == 'all' %}selected{% endif %}>All accounts</option>
+              {% for acct in available_accounts %}
+              <option value="{{ acct }}" {% if filters.account == acct %}selected{% endif %}>{{ acct }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <fieldset>
+            <legend>Quick Range</legend>
+            <div class="range-buttons">
+              {% for value, label in range_options %}
+              <button type="submit" name="range" value="{{ value }}" class="{% if filters.range == value %}active{% endif %}">{{ label }}</button>
+              {% endfor %}
+            </div>
+          </fieldset>
+          <div class="date-inputs">
+            <div class="field">
+              <label class="filter-label" for="start-date">Start</label>
+              <input id="start-date" type="date" name="start" value="{{ filter_form_values.start }}">
+            </div>
+            <div class="field">
+              <label class="filter-label" for="end-date">End</label>
+              <input id="end-date" type="date" name="end" value="{{ filter_form_values.end }}">
+            </div>
+            <div class="field" style="min-width:160px;">
+              <button type="submit" class="secondary-button">Apply Filters</button>
+              <small>Custom dates apply when the range is set to Custom.</small>
+            </div>
+          </div>
         </form>
       </div>
     </header>
 
-    <section id="manual-entry">
-      <div class="manual-card">
-        <h2>Manual Transactions</h2>
-        <p class="section-help">Start from scratch by recording spending or income. Entries stay in this browser session so you can experiment freely.</p>
-        {% if errors %}
-        <div class="form-errors" role="alert">
-          <ul>
-            {% for message in errors %}
-            <li>{{ message }}</li>
-            {% endfor %}
-          </ul>
-        </div>
-        {% endif %}
-        <form class="transaction-form" method="post" autocomplete="off">
-          <input type="hidden" name="action" value="add">
-          <input type="hidden" name="window" value="{{ active_window }}">
-          {% for path in inputs %}
-          <input type="hidden" name="input" value="{{ path }}">
+    <section class="data-entry" id="data-entry">
+      {% if errors %}
+      <div class="form-errors" role="alert">
+        <ul>
+          {% for message in errors %}
+          <li>{{ message }}</li>
           {% endfor %}
-          <div class="field-group">
-            <label for="txn-date">Date</label>
-            <input id="txn-date" type="date" name="date" value="{{ form_data.date }}" required>
-          </div>
-          <div class="field-group">
-            <label for="txn-description">Description</label>
-            <input id="txn-description" type="text" name="description" value="{{ form_data.description }}" placeholder="Groceries, rent, utilities..." required>
-          </div>
-          <div class="field-group">
-            <label for="txn-kind">Type</label>
-            <select id="txn-kind" name="kind">
-              <option value="expense" {% if form_data.kind != 'income' %}selected{% endif %}>Expense</option>
-              <option value="income" {% if form_data.kind == 'income' %}selected{% endif %}>Income</option>
-            </select>
-          </div>
-          <div class="field-group">
-            <label for="txn-amount">Amount</label>
-            <input id="txn-amount" type="number" step="0.01" min="0" name="amount" value="{{ form_data.amount }}" placeholder="0.00" required>
-          </div>
-          <div class="field-group">
-            <label for="txn-account">Account (optional)</label>
-            <input id="txn-account" type="text" name="account" value="{{ form_data.account }}" placeholder="Checking, credit card, cash...">
-          </div>
-          <button type="submit">Add Transaction</button>
-        </form>
-        <div class="manual-actions">
-          <p class="section-help">{{ manual_count }} manual transaction{% if manual_count != 1 %}s{% endif %} captured.</p>
-          {% if manual_transactions %}
-          <form method="post">
-            <input type="hidden" name="action" value="clear">
-            <input type="hidden" name="window" value="{{ active_window }}">
+        </ul>
+      </div>
+      {% endif %}
+      <div class="entry-grid">
+        <div class="card manual-card">
+          <h2>{% if form_mode == 'edit' %}Edit Transaction{% else %}Add Transaction{% endif %}</h2>
+          <p>Capture spending or income manually. Transactions are stored in your browser session.</p>
+          <form class="transaction-form" method="post" autocomplete="off">
+            <input type="hidden" name="action" value="{% if form_mode == 'edit' %}save_edit{% else %}add_manual{% endif %}">
+            {% if form_mode == 'edit' and edit_id %}
+            <input type="hidden" name="transaction_id" value="{{ edit_id }}">
+            {% endif %}
             {% for path in inputs %}
             <input type="hidden" name="input" value="{{ path }}">
             {% endfor %}
-            <button type="submit">Clear All</button>
-          </form>
-          {% endif %}
-        </div>
-        {% if manual_transactions %}
-        <table class="manual-table" aria-label="Manual transactions">
-          <thead>
-            <tr><th>Date</th><th>Description</th><th>Type</th><th>Amount</th><th>Account</th><th></th></tr>
-          </thead>
-          <tbody>
-            {% for txn in manual_transactions %}
-            <tr>
-              <td>{{ txn.date }}</td>
-              <td>{{ txn.description }}</td>
-              <td>{{ 'Income' if txn.kind == 'income' else 'Expense' }}</td>
-              <td>
-                {% if txn.amount is not none %}
-                {% if txn.kind == 'expense' %}-{% else %}+{% endif %}${{ '%0.2f'|format(txn.amount|abs) }}
-                {% else %}
-                --
-                {% endif %}
-              </td>
-              <td>{{ txn.account if txn.account else '--' }}</td>
-              <td class="actions">
-                <form method="post">
-                  <input type="hidden" name="action" value="delete">
-                  <input type="hidden" name="index" value="{{ txn.index }}">
-                  <input type="hidden" name="window" value="{{ active_window }}">
-                  {% for path in inputs %}
-                  <input type="hidden" name="input" value="{{ path }}">
-                  {% endfor %}
-                  <button type="submit">Remove</button>
-                </form>
-              </td>
-            </tr>
+            {% for name, value in filter_form_values.items() %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
-          </tbody>
-        </table>
-        {% else %}
-        <p class="section-help">No manual transactions yet. Add one above to populate the dashboard.</p>
-        {% endif %}
+            <div class="field">
+              <label for="txn-date">Date</label>
+              <input id="txn-date" type="date" name="date" value="{{ manual_form.date }}" required>
+            </div>
+            <div class="field">
+              <label for="txn-description">Description</label>
+              <input id="txn-description" type="text" name="description" value="{{ manual_form.description }}" placeholder="Groceries, rent, utilities..." required>
+            </div>
+            <div class="field">
+              <label for="txn-kind">Type</label>
+              <select id="txn-kind" name="kind">
+                <option value="expense" {% if manual_form.kind != 'income' %}selected{% endif %}>Expense</option>
+                <option value="income" {% if manual_form.kind == 'income' %}selected{% endif %}>Income</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="txn-amount">Amount</label>
+              <input id="txn-amount" type="number" step="0.01" min="0" name="amount" value="{{ manual_form.amount }}" placeholder="0.00" required>
+            </div>
+            <div class="field">
+              <label for="txn-account">Account (optional)</label>
+              <input id="txn-account" type="text" name="account" value="{{ manual_form.account }}" placeholder="Checking, credit card, cash...">
+            </div>
+            <div class="field">
+              <button type="submit" class="primary-button">{% if form_mode == 'edit' %}Save Changes{% else %}Add Transaction{% endif %}</button>
+              {% if form_mode == 'edit' %}
+              <a class="secondary-button" href="{{ cancel_edit_url }}">Cancel</a>
+              {% endif %}
+            </div>
+          </form>
+        </div>
+        <div class="card import-card">
+          <h2>Import CSV</h2>
+          <p>Upload bank exports to analyze instantly. We detect common headers automatically.</p>
+          <form method="post" enctype="multipart/form-data">
+            <input type="hidden" name="action" value="upload_csv">
+            {% for path in inputs %}
+            <input type="hidden" name="input" value="{{ path }}">
+            {% endfor %}
+            {% for name, value in filter_form_values.items() %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {% endfor %}
+            <div class="field" style="margin-bottom: 0.75rem;">
+              <label class="filter-label" for="csv-file">CSV File</label>
+              <input id="csv-file" type="file" name="csv_file" accept=".csv" required>
+            </div>
+            <button type="submit" class="primary-button">Import Transactions</button>
+          </form>
+          <div class="import-actions">
+            <form method="post">
+              <input type="hidden" name="action" value="clear_transactions">
+              {% for path in inputs %}
+              <input type="hidden" name="input" value="{{ path }}">
+              {% endfor %}
+              {% for name, value in filter_form_values.items() %}
+              <input type="hidden" name="{{ name }}" value="{{ value }}">
+              {% endfor %}
+              <button type="submit" class="danger-button">Clear Session Transactions</button>
+            </form>
+          </div>
+        </div>
+        <div class="card budget-card">
+          <h2>Budgets</h2>
+          <p>Track monthly limits by category. These combine with any defaults from configuration.</p>
+          <form class="budget-form" method="post">
+            <input type="hidden" name="action" value="add_budget">
+            {% for path in inputs %}
+            <input type="hidden" name="input" value="{{ path }}">
+            {% endfor %}
+            {% for name, value in filter_form_values.items() %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {% endfor %}
+            <div class="field">
+              <label for="budget-category">Category</label>
+              <input id="budget-category" type="text" name="budget_category" value="{{ budget_form.category }}" placeholder="e.g. Groceries" required>
+            </div>
+            <div class="field">
+              <label for="budget-limit">Monthly Limit</label>
+              <input id="budget-limit" type="number" step="0.01" min="0" name="budget_limit" value="{{ budget_form.limit }}" placeholder="0.00" required>
+            </div>
+            <div class="field">
+              <button type="submit" class="primary-button">Save Budget</button>
+            </div>
+          </form>
+        </div>
       </div>
     </section>
 
+    <section class="transaction-table" id="transactions">
+      <h2>Transactions</h2>
+      <p class="section-help">Filtered view: {{ range_label|lower }}{% if filters.category != 'all' %}, category {{ filters.category }}{% endif %}{% if filters.account != 'all' %}, account {{ filters.account }}{% endif %}.</p>
+      <table aria-label="Transactions">
+        <thead>
+          <tr>
+            <th>Date</th>
+            <th>Description</th>
+            <th>Category</th>
+            <th>Type</th>
+            <th>Amount</th>
+            <th>Account</th>
+            <th>Source</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for txn in transaction_rows %}
+          <tr>
+            <td>{{ txn.date }}</td>
+            <td>{{ txn.description }}</td>
+            <td>{{ txn.category }}</td>
+            <td class="type {{ txn.kind }}">{% if txn.kind == 'income' %}Income{% else %}Expense{% endif %}</td>
+            <td>{% if txn.kind == 'expense' %}-{% endif %}${{ '%0.2f'|format(txn.amount) }}</td>
+            <td>{{ txn.account if txn.account else '--' }}</td>
+            <td>{{ txn.source|capitalize }}</td>
+            <td class="actions">
+              <a class="edit-link" href="{{ txn.edit_url }}">Edit</a>
+              <form method="post" class="inline-form">
+                <input type="hidden" name="action" value="delete_transaction">
+                <input type="hidden" name="transaction_id" value="{{ txn.id }}">
+                {% for path in inputs %}
+                <input type="hidden" name="input" value="{{ path }}">
+                {% endfor %}
+                {% for name, value in filter_form_values.items() %}
+                <input type="hidden" name="{{ name }}" value="{{ value }}">
+                {% endfor %}
+                <button type="submit" class="link-button">Delete</button>
+              </form>
+            </td>
+          </tr>
+          {% else %}
+          <tr><td colspan="8">No transactions match the current filters.</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </section>
 
     <section id="overview">
       <h2>Spending Overview</h2>
-      <p class="section-help">Use this snapshot to understand overall income, expenses, and how spending breaks down by category for {{ window_label.lower() }}.</p>
+      <p class="section-help">Snapshot for {{ range_label|lower }} covering income, expenses, and category trends.</p>
       <div class="totals">
         <div class="card">
           <h3>Income</h3>
@@ -418,7 +617,7 @@
 
     <section id="monthly">
       <h2>Monthly Totals</h2>
-      <p class="section-help">Track monthly inflows and outflows to spot seasonal shifts or budget changes.</p>
+      <p class="section-help">Track inflows and outflows month-to-month to spot seasonal shifts.</p>
       <table aria-label="Monthly totals">
         <thead>
           <tr><th>Month</th><th>Income</th><th>Expense</th><th>Net</th></tr>
@@ -438,24 +637,45 @@
       </table>
     </section>
 
-    {% if summary.budget_status %}
+    {% if budget_rows %}
     <section id="budget">
       <h2>Budget Status</h2>
-      <p class="section-help">Compare actual spending against your configured monthly limits for the current month.</p>
+      <p class="section-help">Compare actual spending against monthly limits. Categories above 100% are highlighted.</p>
       <table aria-label="Budget status">
         <thead>
-          <tr><th>Category</th><th>Limit</th><th>Actual</th><th>Remaining</th></tr>
+          <tr><th>Category</th><th>Limit</th><th>Actual</th><th>Remaining</th><th>Progress</th><th></th></tr>
         </thead>
         <tbody>
-          {% for cat, vals in summary.budget_status.items() %}
-          <tr>
-            <td>{{ cat }}</td>
-            <td>${{ '%0.2f'|format(vals.limit) }}</td>
-            <td>${{ '%0.2f'|format(vals.actual) }}</td>
-            <td>${{ '%0.2f'|format(vals.remaining) }}</td>
+          {% for row in budget_rows %}
+          <tr class="budget-row{% if row.over %} over{% endif %}">
+            <td>{{ row.category }}</td>
+            <td>{% if row.limit is not none %}${{ '%0.2f'|format(row.limit) }}{% else %}--{% endif %}</td>
+            <td>{% if row.actual is not none %}${{ '%0.2f'|format(row.actual) }}{% else %}--{% endif %}</td>
+            <td>{% if row.remaining is not none %}${{ '%0.2f'|format(row.remaining) }}{% else %}--{% endif %}</td>
+            <td style="min-width: 140px;">
+              <div class="progress-track">
+                <div class="progress-fill" style="width: {{ row.progress }}%;"></div>
+              </div>
+              <small>{{ row.progress }}%</small>
+            </td>
+            <td>
+              {% if row.editable %}
+              <form method="post">
+                <input type="hidden" name="action" value="remove_budget">
+                <input type="hidden" name="budget_category" value="{{ row.category }}">
+                {% for path in inputs %}
+                <input type="hidden" name="input" value="{{ path }}">
+                {% endfor %}
+                {% for name, value in filter_form_values.items() %}
+                <input type="hidden" name="{{ name }}" value="{{ value }}">
+                {% endfor %}
+                <button type="submit" class="link-button">Remove</button>
+              </form>
+              {% endif %}
+            </td>
           </tr>
           {% else %}
-          <tr><td colspan="4">No budgets configured.</td></tr>
+          <tr><td colspan="6">No budgets configured yet.</td></tr>
           {% endfor %}
         </tbody>
       </table>
@@ -464,7 +684,7 @@
 
     <section id="top-purchases">
       <h2>Top Purchases</h2>
-      <p class="section-help">Highest-spend merchants or descriptions in {{ window_label.lower() }} to spotlight where money is going.</p>
+      <p class="section-help">Largest spends in {{ range_label|lower }} to highlight where money is going.</p>
       <table aria-label="Top purchases">
         <thead>
           <tr><th>Merchant / Description</th><th>Spend</th></tr>
@@ -481,7 +701,7 @@
 
     <section id="recurring">
       <h2>Recurring Payments</h2>
-      <p class="section-help">Identify subscriptions and routine bills based on merchants appearing across multiple months.</p>
+      <p class="section-help">Payments that repeat across months help you spot subscriptions quickly.</p>
       <table aria-label="Recurring payments">
         <thead>
           <tr><th>Description</th><th>Typical Amount</th><th>Months Seen</th></tr>

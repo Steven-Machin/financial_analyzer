@@ -1,4 +1,4 @@
-"""Data loading helpers.
+﻿"""Data loading helpers.
 
 Supports reading one or more CSV files and normalizing them into a common
 transaction schema with fields:
@@ -13,7 +13,7 @@ import csv
 import datetime as dt
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Optional
+from typing import Iterable, List, Optional, TextIO
 
 
 @dataclass
@@ -23,6 +23,7 @@ class Transaction:
     amount: float  # negative = expense, positive = income
     account: Optional[str] = None
     category: Optional[str] = None  # filled later by categorizer
+    id: Optional[str] = None  # optional identifier for session-managed entries
 
 
 def _parse_date(value: str) -> dt.date:
@@ -67,39 +68,52 @@ _CREDIT_COLS = ("credit", "deposit")
 _ACCOUNT_COLS = ("account", "account name", "account number")
 
 
+def _load_csv_reader(reader: csv.DictReader, source_name: str) -> List[Transaction]:
+    fieldnames = reader.fieldnames or []
+    date_col = _find_column(fieldnames, _DATE_COLS)
+    desc_col = _find_column(fieldnames, _DESC_COLS)
+    amt_col = _find_column(fieldnames, _AMT_COLS)
+    debit_col = _find_column(fieldnames, _DEBIT_COLS)
+    credit_col = _find_column(fieldnames, _CREDIT_COLS)
+    account_col = _find_column(fieldnames, _ACCOUNT_COLS)
+
+    if not date_col or not desc_col or (not amt_col and not (debit_col or credit_col)):
+        raise ValueError(
+            f"{source_name}: Missing required columns. Need date+description and amount OR debit/credit."
+        )
+
+    txns: List[Transaction] = []
+    for row in reader:
+        date = _parse_date(row[date_col])
+        description = (row[desc_col] or "").strip()
+        amount: float
+        if amt_col:
+            amount = _to_float(row[amt_col])
+        else:
+            debit = row.get(debit_col) if debit_col else None
+            credit = row.get(credit_col) if credit_col else None
+            d = _to_float(debit) if debit not in (None, "") else 0.0
+            c = _to_float(credit) if credit not in (None, "") else 0.0
+            amount = c - d  # credit positive, debit negative
+
+        account = (row.get(account_col) or None) if account_col else None
+        txns.append(Transaction(date=date, description=description, amount=amount, account=account))
+    return txns
+
+
 def load_csv_file(path: str | Path) -> List[Transaction]:
     p = Path(path)
     with p.open("r", encoding="utf-8-sig", newline="") as f:
         reader = csv.DictReader(f)
-        fieldnames = reader.fieldnames or []
-        date_col = _find_column(fieldnames, _DATE_COLS)
-        desc_col = _find_column(fieldnames, _DESC_COLS)
-        amt_col = _find_column(fieldnames, _AMT_COLS)
-        debit_col = _find_column(fieldnames, _DEBIT_COLS)
-        credit_col = _find_column(fieldnames, _CREDIT_COLS)
-        account_col = _find_column(fieldnames, _ACCOUNT_COLS)
+        return _load_csv_reader(reader, p.name)
 
-        if not date_col or not desc_col or (not amt_col and not (debit_col or credit_col)):
-            raise ValueError(
-                f"{p.name}: Missing required columns. Need date+description and amount OR debit/credit."
-            )
 
-        txns: List[Transaction] = []
-        for row in reader:
-            date = _parse_date(row[date_col])
-            description = (row[desc_col] or "").strip()
-            amount: float
-            if amt_col:
-                amount = _to_float(row[amt_col])
-            else:
-                debit = row.get(debit_col) if debit_col else None
-                credit = row.get(credit_col) if credit_col else None
-                d = _to_float(debit) if debit not in (None, "") else 0.0
-                c = _to_float(credit) if credit not in (None, "") else 0.0
-                amount = c - d  # credit positive, debit negative
-
-            account = (row.get(account_col) or None) if account_col else None
-            txns.append(Transaction(date=date, description=description, amount=amount, account=account))
+def load_csv_stream(handle: TextIO, label: str = "<upload>") -> List[Transaction]:
+    current_pos = handle.tell() if handle.seekable() else None
+    if current_pos is not None:
+        handle.seek(0)
+    reader = csv.DictReader(handle)
+    txns = _load_csv_reader(reader, label)
     return txns
 
 
