@@ -235,6 +235,23 @@
       font-size: 0.95rem;
       background: #fdfdff;
     }
+    .import-card form {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      margin: 0;
+    }
+    .import-card .field {
+      display: flex;
+      flex-direction: column;
+      gap: 0.4rem;
+    }
+    .import-card .primary-button,
+    .import-card .secondary-button {
+      width: 100%;
+      text-align: center;
+      padding: 0.7rem 1.3rem;
+    }
     .primary-button {
       border: none;
       background: #365feb;
@@ -282,10 +299,10 @@
       text-decoration: underline;
     }
     .import-actions {
-      display: flex;
-      gap: 0.8rem;
-      flex-wrap: wrap;
-      margin-top: 1.2rem;
+      margin-top: 1.75rem;
+    }
+    .import-actions form {
+      margin: 0;
     }
     .account-list {
       margin-top: 1.2rem;
@@ -622,7 +639,7 @@
             <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
             <input type="hidden" name="page" value="{{ pagination.current_page }}">
-            <div class="field" style="margin-bottom: 0.75rem;">
+            <div class="field">
               <label class="filter-label" for="csv-file">CSV File</label>
               <input id="csv-file" type="file" name="csv_file" accept=".csv" required>
             </div>
@@ -649,7 +666,7 @@
               <input type="hidden" name="{{ name }}" value="{{ value }}">
               {% endfor %}
               <input type="hidden" name="page" value="{{ pagination.current_page }}">
-              <button type="submit" class="danger-button">Clear Session Transactions</button>
+              <button type="submit" class="secondary-button">Clear Session Transactions</button>
             </form>
           </div>
         </div>
@@ -1059,4 +1076,3 @@
   </script>
 </body>
 </html>
-
