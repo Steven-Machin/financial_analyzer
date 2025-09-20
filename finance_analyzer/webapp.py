@@ -11,7 +11,6 @@ from typing import Dict, List, Optional, Sequence
 
 from flask import (
     Flask,
-    flash,
     g,
     jsonify,
     redirect,
@@ -40,6 +39,8 @@ RANGE_OPTIONS = (
 )
 RANGE_LABELS = {key: label for key, label in RANGE_OPTIONS}
 DEFAULT_RANGE = "last_3"
+PER_PAGE_OPTIONS = (10, 25, 50, 100)
+DEFAULT_PER_PAGE = 25
 
 def _filter_recent_transactions(txns: Sequence[Transaction], months: Optional[int]):
     if not txns or not months or months <= 0:
@@ -88,6 +89,22 @@ def _format_range_metadata(txns) -> dict:
     }
 
 
+def _normalize_per_page(value: Optional[str]) -> int:
+    try:
+        per_page = int(value) if value is not None else DEFAULT_PER_PAGE
+    except (TypeError, ValueError):
+        return DEFAULT_PER_PAGE
+    return per_page if per_page in PER_PAGE_OPTIONS else DEFAULT_PER_PAGE
+
+
+def _normalize_page(value: Optional[str]) -> int:
+    try:
+        page = int(value) if value is not None else 1
+    except (TypeError, ValueError):
+        return 1
+    return page if page > 0 else 1
+
+
 def _parse_filters(data) -> Dict[str, str]:
     range_key = data.get("range") or DEFAULT_RANGE
     if range_key not in RANGE_LABELS:
@@ -99,12 +116,16 @@ def _parse_filters(data) -> Dict[str, str]:
     if range_key != "custom":
         start = ""
         end = ""
+    per_page = _normalize_per_page(data.get("per_page"))
+    page = _normalize_page(data.get("page"))
     return {
         "range": range_key,
         "category": category,
         "account": account,
         "start": start,
         "end": end,
+        "per_page": per_page,
+        "page": page,
     }
 
 
@@ -113,23 +134,40 @@ def _filters_for_redirect(
     extra: Optional[Dict[str, Optional[str]]] = None,
 ) -> Dict[str, str]:
     params: Dict[str, str] = {}
-    if filters.get("category") and filters["category"] not in {"", "all"}:
-        params["category"] = filters["category"]
-    if filters.get("account") and filters["account"] not in {"", "all"}:
-        params["account"] = filters["account"]
-    if filters.get("range") and filters["range"] != DEFAULT_RANGE:
-        params["range"] = filters["range"]
-    if filters.get("range") == "custom":
+    category = filters.get("category")
+    if category and category not in {"", "all"}:
+        params["category"] = category
+    account = filters.get("account")
+    if account and account not in {"", "all"}:
+        params["account"] = account
+    range_value = filters.get("range") or DEFAULT_RANGE
+    if range_value != DEFAULT_RANGE:
+        params["range"] = range_value
+    if range_value == "custom":
         if filters.get("start"):
             params["start"] = filters["start"]
         if filters.get("end"):
             params["end"] = filters["end"]
+    per_page = filters.get("per_page")
+    try:
+        per_page_value = int(per_page) if per_page is not None else DEFAULT_PER_PAGE
+    except (TypeError, ValueError):
+        per_page_value = DEFAULT_PER_PAGE
+    if per_page_value in PER_PAGE_OPTIONS and per_page_value != DEFAULT_PER_PAGE:
+        params["per_page"] = str(per_page_value)
+    page = filters.get("page")
+    try:
+        page_value = int(page) if page is not None else 1
+    except (TypeError, ValueError):
+        page_value = 1
+    if page_value > 1:
+        params["page"] = str(page_value)
     if extra:
         for key, value in extra.items():
             if value in (None, "", "all"):
                 params.pop(key, None)
             else:
-                params[key] = value
+                params[key] = str(value)
     return params
 
 
@@ -393,6 +431,8 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         user_id = g.user["id"]
         errors: List[str] = []
         filters = _parse_filters(request.form if request.method == "POST" else request.args)
+        per_page = filters.get("per_page", DEFAULT_PER_PAGE)
+        page = filters.get("page", 1)
         accounts = _fetch_accounts(user_id)
         account_names = [row["name"] for row in accounts]
         if DEFAULT_ACCOUNT not in account_names:
@@ -464,7 +504,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                             ),
                         )
                         db.commit()
-                        return _redirect_to_index(filters)
+                        return _redirect_to_index(filters, {"page": None})
                     if action == "save_edit":
                         target_id = request.form.get("transaction_id") or ""
                         if not target_id.isdigit():
@@ -490,7 +530,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                                     ),
                                 )
                                 db.commit()
-                                return _redirect_to_index(filters)
+                                return _redirect_to_index(filters, {"page": None})
                 else:
                     form_mode = "edit" if action == "save_edit" else "add"
                     edit_id = request.form.get("transaction_id")
@@ -504,11 +544,11 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                     db.commit()
                 else:
                     errors.append("Unable to remove the selected transaction.")
-                return _redirect_to_index(filters)
+                return _redirect_to_index(filters, {"page": None})
             elif action == "clear_transactions":
                 db.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
                 db.commit()
-                return _redirect_to_index(filters)
+                return _redirect_to_index(filters, {"page": None})
             elif action == "upload_csv":
                 file = request.files.get("csv_file")
                 if not file or not file.filename:
@@ -550,7 +590,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                                     ),
                                 )
                             db.commit()
-                            return _redirect_to_index(filters)
+                            return _redirect_to_index(filters, {"page": None})
             elif action == "add_budget":
                 budget_form = {
                     "category": (request.form.get("budget_category") or "").strip(),
@@ -577,7 +617,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                         (user_id, budget_form["category"], limit_value),
                     )
                     db.commit()
-                    return _redirect_to_index(filters)
+                    return _redirect_to_index(filters, {"page": None})
             elif action == "remove_budget":
                 category = (request.form.get("budget_category") or "").strip()
                 if category:
@@ -586,7 +626,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                         (user_id, category),
                     )
                     db.commit()
-                    return _redirect_to_index(filters)
+                    return _redirect_to_index(filters, {"page": None})
             elif action == "add_account":
                 account_name = (request.form.get("account_name") or "").strip()
                 if not account_name:
@@ -596,7 +636,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                         _ensure_account(user_id, account_name)
                         manual_form["account"] = account_name
                         db.commit()
-                        return _redirect_to_index(filters)
+                        return _redirect_to_index(filters, {"page": None})
                     except sqlite3.IntegrityError:
                         errors.append("That account already exists.")
             elif action == "delete_account":
@@ -618,7 +658,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                             (account_id, user_id),
                         )
                         db.commit()
-                        return _redirect_to_index(filters, {"account": "all"})
+                        return _redirect_to_index(filters, {"account": "all", "page": None})
         transactions_rows = _fetch_transactions(user_id)
         transactions = [
             Transaction(
@@ -641,6 +681,18 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             filters["account"] = "all"
 
         filtered_txns = _apply_filters(transactions, filters)
+        total_transactions = len(filtered_txns)
+        total_pages = (total_transactions + per_page - 1) // per_page if total_transactions else 1
+        current_page = page if total_transactions else 1
+        if current_page > total_pages:
+            current_page = total_pages
+        if current_page < 1:
+            current_page = 1
+        filters["page"] = current_page
+        filters["per_page"] = per_page
+        start_index = (current_page - 1) * per_page
+        end_index = start_index + per_page
+        page_txns = filtered_txns[start_index:end_index]
 
         budgets_rows = _fetch_budgets(user_id)
         user_budgets = {row["category"]: row["monthly_limit"] for row in budgets_rows}
@@ -653,7 +705,7 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
 
         transaction_meta = {row["id"]: row for row in transactions_rows}
         transaction_rows = []
-        for txn in filtered_txns:
+        for txn in page_txns:
             row = transaction_meta.get(int(txn.id or 0))
             edit_params = _filters_for_redirect(filters, {"edit": txn.id})
             transaction_rows.append(
@@ -675,12 +727,28 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         counts = _count_sources(transactions_rows)
         data_source_label = _compose_data_source_label(counts)
 
-        filter_form_values = {
+        filter_state = {
             "category": filters.get("category", "all"),
             "account": filters.get("account", "all"),
             "range": filters.get("range", DEFAULT_RANGE),
             "start": filters.get("start", ""),
             "end": filters.get("end", ""),
+            "per_page": str(per_page),
+        }
+
+        page_display_start = start_index + 1 if total_transactions else 0
+        page_display_end = min(end_index, total_transactions) if total_transactions else 0
+        pagination = {
+            "current_page": current_page,
+            "total_pages": total_pages or 1,
+            "per_page": per_page,
+            "total_transactions": total_transactions,
+            "start_display": page_display_start,
+            "end_display": page_display_end,
+            "has_prev": current_page > 1,
+            "has_next": current_page < max(total_pages, 1),
+            "prev_page": current_page - 1,
+            "next_page": current_page + 1 if current_page < max(total_pages, 1) else current_page,
         }
 
         cancel_edit_url = url_for("index", **_filters_for_redirect(filters, {"edit": None}))
@@ -780,7 +848,10 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             overall_totals_all=overall_totals_all,
             inputs=[],
             filters=filters,
-            filter_form_values=filter_form_values,
+            filter_state=filter_state,
+            per_page=per_page,
+            per_page_options=PER_PAGE_OPTIONS,
+            pagination=pagination,
             range_options=RANGE_OPTIONS,
             range_label=range_label,
             chart_title=chart_title,

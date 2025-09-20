@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -44,6 +44,34 @@
     }
     .user-bar form {
       margin: 0;
+    }
+    .pagination-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      margin-top: 1.2rem;
+    }
+    .pagination-info {
+      font-size: 0.9rem;
+      color: #4b5563;
+    }
+    .pagination-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .pagination-controls form {
+      margin: 0;
+    }
+    .pagination-controls button[disabled] {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .page-status {
+      font-weight: 600;
+      color: #1f2937;
     }
     .controls {
       display: flex;
@@ -437,6 +465,13 @@
       .account-form {
         grid-template-columns: 1fr;
       }
+      .pagination-bar {
+        align-items: flex-start;
+      }
+      .pagination-controls {
+        flex-wrap: wrap;
+        justify-content: flex-start;
+      }
       table td.actions {
         flex-direction: column;
         align-items: flex-start;
@@ -479,6 +514,14 @@
               {% endfor %}
             </select>
           </div>
+          <div class="filter-group">
+            <span class="filter-label">Rows</span>
+            <select name="per_page" onchange="this.form.submit()">
+              {% for option in per_page_options %}
+              <option value="{{ option }}" {% if per_page == option %}selected{% endif %}>{{ option }} per page</option>
+              {% endfor %}
+            </select>
+          </div>
           <fieldset>
             <legend>Quick Range</legend>
             <div class="range-buttons">
@@ -490,17 +533,18 @@
           <div class="date-inputs">
             <div class="field">
               <label class="filter-label" for="start-date">Start</label>
-              <input id="start-date" type="date" name="start" value="{{ filter_form_values.start }}">
+              <input id="start-date" type="date" name="start" value="{{ filter_state.start }}">
             </div>
             <div class="field">
               <label class="filter-label" for="end-date">End</label>
-              <input id="end-date" type="date" name="end" value="{{ filter_form_values.end }}">
+              <input id="end-date" type="date" name="end" value="{{ filter_state.end }}">
             </div>
             <div class="field" style="min-width:160px;">
               <button type="submit" class="secondary-button">Apply Filters</button>
               <small>Custom dates apply when the range is set to Custom.</small>
             </div>
           </div>
+          <input type="hidden" name="page" value="1">
         </form>
       </div>
     </header>
@@ -527,9 +571,10 @@
             {% for path in inputs %}
             <input type="hidden" name="input" value="{{ path }}">
             {% endfor %}
-            {% for name, value in filter_form_values.items() %}
+            {% for name, value in filter_state.items() %}
             <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
+            <input type="hidden" name="page" value="{{ pagination.current_page }}">
             <div class="field">
               <label for="txn-date">Date</label>
               <input id="txn-date" type="date" name="date" value="{{ manual_form.date }}" required>
@@ -573,9 +618,10 @@
             {% for path in inputs %}
             <input type="hidden" name="input" value="{{ path }}">
             {% endfor %}
-            {% for name, value in filter_form_values.items() %}
+            {% for name, value in filter_state.items() %}
             <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
+            <input type="hidden" name="page" value="{{ pagination.current_page }}">
             <div class="field" style="margin-bottom: 0.75rem;">
               <label class="filter-label" for="csv-file">CSV File</label>
               <input id="csv-file" type="file" name="csv_file" accept=".csv" required>
@@ -599,9 +645,10 @@
               {% for path in inputs %}
               <input type="hidden" name="input" value="{{ path }}">
               {% endfor %}
-              {% for name, value in filter_form_values.items() %}
+              {% for name, value in filter_state.items() %}
               <input type="hidden" name="{{ name }}" value="{{ value }}">
               {% endfor %}
+              <input type="hidden" name="page" value="{{ pagination.current_page }}">
               <button type="submit" class="danger-button">Clear Session Transactions</button>
             </form>
           </div>
@@ -614,9 +661,10 @@
             {% for path in inputs %}
             <input type="hidden" name="input" value="{{ path }}">
             {% endfor %}
-            {% for name, value in filter_form_values.items() %}
+            {% for name, value in filter_state.items() %}
             <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
+            <input type="hidden" name="page" value="{{ pagination.current_page }}">
             <div class="field">
               <label for="budget-category">Category</label>
               <input id="budget-category" type="text" name="budget_category" value="{{ budget_form.category }}" placeholder="e.g. Groceries" required>
@@ -638,9 +686,10 @@
             {% for path in inputs %}
             <input type="hidden" name="input" value="{{ path }}">
             {% endfor %}
-            {% for name, value in filter_form_values.items() %}
+            {% for name, value in filter_state.items() %}
             <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
+            <input type="hidden" name="page" value="{{ pagination.current_page }}">
             <div class="field">
               <label for="account-name">Account Name</label>
               <input id="account-name" type="text" name="account_name" placeholder="Checking, Savings, Credit Card" required>
@@ -665,9 +714,10 @@
                 {% for path in inputs %}
                 <input type="hidden" name="input" value="{{ path }}">
                 {% endfor %}
-                {% for name, value in filter_form_values.items() %}
+                {% for name, value in filter_state.items() %}
                 <input type="hidden" name="{{ name }}" value="{{ value }}">
                 {% endfor %}
+                <input type="hidden" name="page" value="{{ pagination.current_page }}">
                 <button type="submit" class="link-button">Delete</button>
               </form>
               {% endif %}
@@ -753,9 +803,10 @@
                 {% for path in inputs %}
                 <input type="hidden" name="input" value="{{ path }}">
                 {% endfor %}
-                {% for name, value in filter_form_values.items() %}
+                {% for name, value in filter_state.items() %}
                 <input type="hidden" name="{{ name }}" value="{{ value }}">
                 {% endfor %}
+                <input type="hidden" name="page" value="{{ pagination.current_page }}">
                 <button type="submit" class="link-button">Delete</button>
               </form>
             </td>
@@ -765,6 +816,40 @@
           {% endfor %}
         </tbody>
       </table>
+      <div class="pagination-bar">
+        <div class="pagination-info">
+          {% if pagination.total_transactions %}
+          Showing {{ pagination.start_display }}-{{ pagination.end_display }} of {{ pagination.total_transactions }} transactions
+          {% else %}
+          No transactions to display
+          {% endif %}
+        </div>
+        <div class="pagination-controls">
+          {% if pagination.has_prev %}
+          <form method="get">
+            {% for name, value in filter_state.items() %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {% endfor %}
+            <input type="hidden" name="page" value="{{ pagination.prev_page }}">
+            <button type="submit" class="secondary-button">Previous</button>
+          </form>
+          {% else %}
+          <button class="secondary-button" disabled>Previous</button>
+          {% endif %}
+          <span class="page-status">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+          {% if pagination.has_next %}
+          <form method="get">
+            {% for name, value in filter_state.items() %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {% endfor %}
+            <input type="hidden" name="page" value="{{ pagination.next_page }}">
+            <button type="submit" class="secondary-button">Next</button>
+          </form>
+          {% else %}
+          <button class="secondary-button" disabled>Next</button>
+          {% endif %}
+        </div>
+      </div>
     </section>
 
     <section id="overview">
@@ -852,7 +937,7 @@
                 {% for path in inputs %}
                 <input type="hidden" name="input" value="{{ path }}">
                 {% endfor %}
-                {% for name, value in filter_form_values.items() %}
+                {% for name, value in filter_state.items() %}
                 <input type="hidden" name="{{ name }}" value="{{ value }}">
                 {% endfor %}
                 <button type="submit" class="link-button">Remove</button>
