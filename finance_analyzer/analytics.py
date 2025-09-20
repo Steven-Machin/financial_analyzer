@@ -6,6 +6,7 @@ Functions that compute summaries and trends from transactions.
 from __future__ import annotations
 
 import datetime as dt
+import re
 from collections import defaultdict, Counter
 from dataclasses import dataclass
 from statistics import median
@@ -16,6 +17,14 @@ from .data_loader import Transaction
 
 def month_key(d: dt.date) -> str:
     return f"{d.year:04d}-{d.month:02d}"
+
+
+def _normalize_description(desc: str) -> str:
+    desc = desc.lower()
+    desc = re.sub(r"\d+", " ", desc)
+    desc = re.sub(r"[^a-z\s]", " ", desc)
+    desc = re.sub(r"\s+", " ", desc).strip()
+    return desc
 
 
 def summarize_income_expense(txns: Iterable[Transaction]) -> Dict[str, float]:
@@ -59,28 +68,34 @@ def top_merchants(txns: Iterable[Transaction], n: int = 10) -> List[Tuple[str, f
 def detect_recurring(txns: Iterable[Transaction], min_months: int = 3, tolerance: float = 0.15) -> List[Tuple[str, float, int]]:
     """Detect recurring payments by normalized description.
 
-    Groups by description; if a merchant appears in >= min_months distinct months
-    with amounts that are within `tolerance` (relative) of the median amount,
-    it is considered recurring.
-    Returns list of (description, typical_amount, month_count).
+    A merchant is considered recurring when the charge appears in at least
+    ``min_months`` unique months and the amounts remain within a tolerance.
+    ``tolerance`` is a relative percentage with a $1 absolute floor to avoid
+    rejecting small fluctuations on low recurring charges.
     """
 
-    # Map description -> month -> list[amounts]
     by_desc_month: Dict[str, Dict[str, List[float]]] = defaultdict(lambda: defaultdict(list))
+    display_names: Dict[str, Counter[str]] = defaultdict(Counter)
     for t in txns:
         if t.amount < 0:
-            by_desc_month[t.description][month_key(t.date)].append(-t.amount)
+            norm = _normalize_description(t.description) or t.description.lower().strip()
+            by_desc_month[norm][month_key(t.date)].append(-t.amount)
+            display_names[norm][t.description] += 1
 
     recurring: List[Tuple[str, float, int]] = []
-    for desc, months in by_desc_month.items():
-        month_amounts = [median(amts) for amts in months.values() if amts]
-        if len(month_amounts) >= min_months:
-            med = median(month_amounts)
-            # Check relative variation
-            ok = [abs(x - med) / med <= tolerance for x in month_amounts if med > 0]
-            if ok and sum(ok) >= min_months:
-                recurring.append((desc, round(med, 2), len(month_amounts)))
-    # Sort by months desc then amount
+    for norm_desc, months in by_desc_month.items():
+        month_amounts = {month: median(amts) for month, amts in months.items() if amts}
+        if len(month_amounts) < min_months:
+            continue
+        med = median(month_amounts.values())
+        tolerance_amount = max(abs(med) * tolerance, 1.0) if med else 1.0
+        accepted = [amount for amount in month_amounts.values() if abs(amount - med) <= tolerance_amount]
+        if len(accepted) < min_months:
+            continue
+        typical_amount = round(sum(accepted) / len(accepted), 2)
+        display = display_names[norm_desc].most_common(1)[0][0]
+        recurring.append((display, typical_amount, len(accepted)))
+
     recurring.sort(key=lambda x: (-x[2], -x[1]))
     return recurring
 
