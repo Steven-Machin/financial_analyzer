@@ -65,6 +65,14 @@
     .pagination-controls form {
       margin: 0;
     }
+    .per-page-form {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+    .per-page-form select {
+      min-width: 80px;
+    }
     .pagination-controls button[disabled] {
       opacity: 0.5;
       cursor: not-allowed;
@@ -487,7 +495,7 @@
       <p class="inputs-note">Currently analyzing: {{ data_source_label }}</p>
       <div class="user-bar">
         <span>Logged in as {{ user.username }}</span>
-        <form method="post" action="{{ url_for('logout') }}">
+        <form method="post" action="{{ url_for('logout') }}" data-no-scroll="true">
           <button type="submit" class="secondary-button">Log Out</button>
         </form>
       </div>
@@ -511,14 +519,6 @@
               <option value="all" {% if filters.account == 'all' %}selected{% endif %}>All accounts</option>
               {% for acct in available_accounts %}
               <option value="{{ acct }}" {% if filters.account == acct %}selected{% endif %}>{{ acct }}</option>
-              {% endfor %}
-            </select>
-          </div>
-          <div class="filter-group">
-            <span class="filter-label">Rows</span>
-            <select name="per_page" onchange="this.form.submit()">
-              {% for option in per_page_options %}
-              <option value="{{ option }}" {% if per_page == option %}selected{% endif %}>{{ option }} per page</option>
               {% endfor %}
             </select>
           </div>
@@ -826,7 +826,7 @@
         </div>
         <div class="pagination-controls">
           {% if pagination.has_prev %}
-          <form method="get">
+          <form method="get" action="{{ url_for('index') }}">
             {% for name, value in filter_state.items() %}
             <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
@@ -837,8 +837,22 @@
           <button class="secondary-button" disabled>Previous</button>
           {% endif %}
           <span class="page-status">Page {{ pagination.current_page }} of {{ pagination.total_pages }}</span>
+          <form method="get" class="per-page-form" action="{{ url_for('index') }}">
+            {% for name, value in filter_state.items() %}
+            {% if name != 'per_page' %}
+            <input type="hidden" name="{{ name }}" value="{{ value }}">
+            {% endif %}
+            {% endfor %}
+            <input type="hidden" name="page" value="1">
+            <label class="filter-label" for="per-page-select">Rows</label>
+            <select id="per-page-select" name="per_page" onchange="this.form.submit()">
+              {% for option in per_page_options %}
+              <option value="{{ option }}" {% if per_page == option %}selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </form>
           {% if pagination.has_next %}
-          <form method="get">
+          <form method="get" action="{{ url_for('index') }}">
             {% for name, value in filter_state.items() %}
             <input type="hidden" name="{{ name }}" value="{{ value }}">
             {% endfor %}
@@ -1025,6 +1039,24 @@
         }
       });
     }
+    const SCROLL_KEY = 'pfa:scrollY';
+    document.querySelectorAll('form').forEach(form => {
+      if (form.dataset.noScroll === 'true') {
+        return;
+      }
+      form.addEventListener('submit', () => {
+        sessionStorage.setItem(SCROLL_KEY, String(window.scrollY || window.pageYOffset || 0));
+      });
+    });
+    const storedScroll = sessionStorage.getItem(SCROLL_KEY);
+    if (storedScroll !== null) {
+      sessionStorage.removeItem(SCROLL_KEY);
+      const offset = parseInt(storedScroll, 10);
+      if (!Number.isNaN(offset)) {
+        window.scrollTo({ top: offset, behavior: 'auto' });
+      }
+    }
   </script>
 </body>
 </html>
+
