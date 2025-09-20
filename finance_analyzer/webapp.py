@@ -7,7 +7,7 @@ import io
 import sqlite3
 from functools import wraps
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from flask import (
     Flask,
@@ -16,6 +16,7 @@ from flask import (
     redirect,
     render_template,
     request,
+    send_file,
     session,
     url_for,
 )
@@ -26,7 +27,7 @@ from .config import AppConfig
 from .categorizer import categorize_transactions
 from .data_loader import DEFAULT_ACCOUNT, Transaction, load_csv_files, load_csv_stream
 from .db import close_db, get_db, init_db
-from .reports import build_summary
+from .reports import build_summary, export_summary_csv, export_summary_json
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = PACKAGE_ROOT.parent
@@ -105,7 +106,7 @@ def _normalize_page(value: Optional[str]) -> int:
     return page if page > 0 else 1
 
 
-def _parse_filters(data) -> Dict[str, str]:
+def _parse_filters(data) -> Dict[str, Any]:
     range_key = data.get("range") or DEFAULT_RANGE
     if range_key not in RANGE_LABELS:
         range_key = DEFAULT_RANGE
@@ -360,6 +361,33 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
     app.before_request(_load_logged_in_user)
     with app.app_context():
         init_db()
+
+    def _build_summary_payload(user_id: int, filters: Dict[str, Any]):
+        transactions_rows = _fetch_transactions(user_id)
+        transactions = [
+            Transaction(
+                date=dt.date.fromisoformat(row["date"]),
+                description=row["description"],
+                amount=row["amount"],
+                account=row["account"],
+                id=str(row["id"]),
+            )
+            for row in transactions_rows
+        ]
+        cfg = AppConfig.load(_resolve_config_path(config_path))
+        if transactions:
+            categorize_transactions(transactions, cfg.rules)
+        filtered_txns = _apply_filters(transactions, filters)
+        budgets_rows = _fetch_budgets(user_id)
+        user_budgets = {row["category"]: row["monthly_limit"] for row in budgets_rows}
+        combined_budgets = {b.category: b.monthly_limit for b in cfg.budgets}
+        combined_budgets.update(user_budgets)
+        summary = build_summary(filtered_txns, combined_budgets or None)
+        summary["date_range"] = _format_range_metadata(filtered_txns)
+        summary["transaction_count"] = len(filtered_txns)
+        summary["filters"] = dict(filters)
+        summary["range_label"] = RANGE_LABELS.get(filters.get("range", DEFAULT_RANGE), RANGE_LABELS[DEFAULT_RANGE])
+        return summary, filtered_txns, transactions_rows, transactions
 
     @app.route("/signup", methods=["GET", "POST"])
     def signup():
@@ -877,36 +905,53 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
     def api_summary():
         user_id = g.user["id"]
         filters = _parse_filters(request.args)
-        transactions_rows = _fetch_transactions(user_id)
-        transactions = [
-            Transaction(
-                date=dt.date.fromisoformat(row["date"]),
-                description=row["description"],
-                amount=row["amount"],
-                account=row["account"],
-                id=str(row["id"]),
-            )
-            for row in transactions_rows
-        ]
-        cfg = AppConfig.load(_resolve_config_path(config_path))
-        if transactions:
-            categorize_transactions(transactions, cfg.rules)
-        filtered_txns = _apply_filters(transactions, filters)
-        budgets_rows = _fetch_budgets(user_id)
-        user_budgets = {row["category"]: row["monthly_limit"] for row in budgets_rows}
-        combined_budgets = {b.category: b.monthly_limit for b in cfg.budgets}
-        combined_budgets.update(user_budgets)
-        summary = build_summary(filtered_txns, combined_budgets or None)
-        summary["date_range"] = _format_range_metadata(filtered_txns)
-        summary["transaction_count"] = len(filtered_txns)
-        summary["filters"] = filters
-        summary["range_label"] = RANGE_LABELS.get(filters.get("range", DEFAULT_RANGE), RANGE_LABELS[DEFAULT_RANGE])
+        summary, filtered_txns, transactions_rows, transactions = _build_summary_payload(user_id, filters)
         account_names = [row["account"] for row in transactions_rows]
         account_order = sorted(set(account_names)) or [DEFAULT_ACCOUNT]
         summary["accounts_all"] = _compute_account_balances(transactions, account_order)
         summary["accounts_view"] = _compute_account_balances(filtered_txns, account_order)
         summary["available_accounts"] = account_order
         return jsonify(summary)
+
+    @app.route("/export/summary.csv")
+    @login_required
+    def export_summary_csv_view():
+        user_id = g.user["id"]
+        filters = _parse_filters(request.args)
+        summary, _, _, _ = _build_summary_payload(user_id, filters)
+        buffer = io.StringIO()
+        export_summary_csv(summary, buffer)
+        csv_data = buffer.getvalue().encode("utf-8")
+        output = io.BytesIO(csv_data)
+        output.seek(0)
+        timestamp = dt.datetime.now().strftime("%Y-%m-%d")
+        filename = f"finance_report_{timestamp}.csv"
+        return send_file(
+            output,
+            mimetype="text/csv",
+            as_attachment=True,
+            download_name=filename,
+        )
+
+    @app.route("/export/summary.json")
+    @login_required
+    def export_summary_json_view():
+        user_id = g.user["id"]
+        filters = _parse_filters(request.args)
+        summary, _, _, _ = _build_summary_payload(user_id, filters)
+        buffer = io.StringIO()
+        export_summary_json(summary, buffer)
+        json_data = buffer.getvalue().encode("utf-8")
+        output = io.BytesIO(json_data)
+        output.seek(0)
+        timestamp = dt.datetime.now().strftime("%Y-%m-%d")
+        filename = f"finance_report_{timestamp}.json"
+        return send_file(
+            output,
+            mimetype="application/json",
+            as_attachment=True,
+            download_name=filename,
+        )
 
     return app
 

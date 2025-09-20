@@ -5,9 +5,10 @@ Formats analytics into human-readable text and JSON-serializable dicts.
 
 from __future__ import annotations
 
+import csv
 import json
 from pathlib import Path
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Dict, IO, Iterable, List, Optional
 
 from .data_loader import Transaction
 from . import analytics as an
@@ -69,3 +70,78 @@ def save_json(summary: Dict, path: str | Path) -> None:
     p.parent.mkdir(parents=True, exist_ok=True)
     with p.open("w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
+
+
+def _ensure_text_writer(target: str | Path | IO[str]):
+    if hasattr(target, "write"):
+        return target, None
+    path = Path(target)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open("w", newline="", encoding="utf-8")
+    return handle, handle
+
+
+def export_summary_csv(summary: Dict, path: str | Path | IO[str]) -> None:
+    def fmt_amount(value) -> str:
+        if value is None:
+            return ""
+        return f"{float(value):.2f}"
+
+    rows: List[List[str]] = [["Section", "Item", "Metric", "Value"]]
+
+    totals = summary.get("totals") or {}
+    for key, label in (("income", "Income"), ("expense", "Expense"), ("net", "Net")):
+        if key in totals:
+            rows.append(["Totals", "", label, fmt_amount(totals.get(key))])
+
+    for cat, amt in (summary.get("category_spend") or {}).items():
+        rows.append(["Category Spend", cat or "Uncategorized", "Amount", fmt_amount(amt)])
+
+    for month, vals in (summary.get("monthly") or {}).items():
+        if not isinstance(vals, dict):
+            continue
+        for key, label in (("income", "Income"), ("expense", "Expense"), ("net", "Net")):
+            if key in vals:
+                rows.append(["Monthly Totals", month, label, fmt_amount(vals.get(key))])
+
+    for desc, amt in (summary.get("top_merchants") or []):
+        rows.append(["Top Merchants", desc, "Spend", fmt_amount(amt)])
+
+    for desc, amt, months in (summary.get("recurring") or []):
+        rows.append(["Recurring Payments", desc, "Typical Amount", fmt_amount(amt)])
+        rows.append(["Recurring Payments", desc, "Months Seen", str(months)])
+
+    budget = summary.get("budget_status") or {}
+    if isinstance(budget, dict):
+        for cat, vals in budget.items():
+            if not isinstance(vals, dict):
+                continue
+            for key, label in (("limit", "Limit"), ("actual", "Actual"), ("remaining", "Remaining")):
+                if key in vals:
+                    rows.append(["Budget Status", cat, label, fmt_amount(vals.get(key))])
+
+    date_range = summary.get("date_range") or {}
+    if isinstance(date_range, dict) and any(date_range.values()):
+        rows.append(["Metadata", "Range Label", "", date_range.get("label", "")])
+        rows.append(["Metadata", "Range Start", "", date_range.get("start", "")])
+        rows.append(["Metadata", "Range End", "", date_range.get("end", "")])
+
+    txn_count = summary.get("transaction_count")
+    if txn_count is not None:
+        rows.append(["Metadata", "Transaction Count", "", str(txn_count)])
+
+    writer_target, to_close = _ensure_text_writer(path)
+    try:
+        writer = csv.writer(writer_target, lineterminator="\n")
+        writer.writerows(rows)
+    finally:
+        if to_close is not None:
+            to_close.close()
+
+
+def export_summary_json(summary: Dict, path: str | Path | IO[str]) -> None:
+    if hasattr(path, "write"):
+        json.dump(summary, path, indent=2)
+        path.write("\n")
+        return
+    save_json(summary, path)

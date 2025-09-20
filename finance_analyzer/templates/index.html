@@ -304,6 +304,15 @@
     .import-actions form {
       margin: 0;
     }
+    .export-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin: 1.25rem 0 1.75rem;
+    }
+    .export-actions form {
+      margin: 0;
+    }
     .account-list {
       margin-top: 1.2rem;
       display: flex;
@@ -886,6 +895,20 @@
     <section id="overview">
       <h2>Spending Overview</h2>
       <p class="section-help">Snapshot for {{ range_label|lower }} covering income, expenses, and category trends.</p>
+      <div class="export-actions">
+        <form method="get" action="{{ url_for('export_summary_csv_view') }}">
+          {% for name, value in filter_state.items() %}
+          <input type="hidden" name="{{ name }}" value="{{ value }}">
+          {% endfor %}
+          <button type="submit" class="primary-button">Export CSV</button>
+        </form>
+        <form method="get" action="{{ url_for('export_summary_json_view') }}">
+          {% for name, value in filter_state.items() %}
+          <input type="hidden" name="{{ name }}" value="{{ value }}">
+          {% endfor %}
+          <button type="submit" class="secondary-button">Export JSON</button>
+        </form>
+      </div>
       <div class="totals">
         <div class="card">
           <h3>Income</h3>
