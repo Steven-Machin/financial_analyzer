@@ -5,6 +5,7 @@ from __future__ import annotations
 import datetime as dt
 import io
 import os
+import secrets
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -26,6 +27,7 @@ from .analytics import summarize_income_expense
 from .config import AppConfig
 from .categorizer import categorize_transactions
 from .data_loader import DEFAULT_ACCOUNT, Transaction, load_csv_stream
+from sqlalchemy import inspect
 from sqlalchemy.exc import IntegrityError
 
 from .models import db, User, Account, Transaction as TransactionModel, Budget
@@ -370,18 +372,30 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         static_folder=str(PACKAGE_ROOT / "static"),
         instance_path=str(instance_path),
     )
-    secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")
+    secret_key = os.environ.get("FLASK_SECRET_KEY")
+    if not secret_key:
+        secret_key = secrets.token_hex(32)
     app.config["SECRET_KEY"] = secret_key
+
     db_path = instance_path / "finance.db"
-    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path.as_posix()}"
-    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
+    database_url = os.environ.get("DATABASE_URL")
+    if database_url and database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    if database_url:
+        app.config["SQLALCHEMY_DATABASE_URI"] = database_url
+    else:
+        app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path.as_posix()}"
+    app.config.setdefault("SQLALCHEMY_TRACK_MODIFICATIONS", False)
+    app.config.setdefault("DEBUG", False)
 
     default_inputs = default_inputs or []
 
     db.init_app(app)
     app.before_request(_load_logged_in_user)
     with app.app_context():
-        db.create_all()
+        inspector = inspect(db.engine)
+        if not inspector.get_table_names():
+            db.create_all()
 
     def _build_summary_payload(user_id: int, filters: Dict[str, Any]):
         transactions_rows = _fetch_transactions(user_id)
@@ -999,4 +1013,5 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    app.run(debug=True)
+    debug_flag = os.environ.get("FLASK_DEBUG", "").lower() in {"1", "true", "yes"}
+    app.run(debug=debug_flag)
