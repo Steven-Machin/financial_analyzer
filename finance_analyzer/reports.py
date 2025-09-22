@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import csv
 import json
+from collections import defaultdict
 from pathlib import Path
 from typing import Dict, IO, Iterable, List, Optional
 
@@ -25,7 +26,39 @@ def build_summary(txns: Iterable[Transaction], budgets: Optional[Dict[str, float
     }
     if budgets:
         summary["budget_status"] = an.budget_comparison(txns, budgets)
+    summary["budget_usage"] = calculate_budget_usage(txns, budgets)
     return summary
+
+
+def calculate_budget_usage(
+    txns: Iterable[Transaction],
+    budgets: Optional[Dict[str, float]] = None,
+) -> List[Dict[str, float]]:
+    """Compute budget usage metrics per category."""
+    if not budgets:
+        return []
+    spend_per_category = defaultdict(float)
+    for txn in txns:
+        if txn.amount < 0:
+            spend_per_category[txn.category or "Other"] += -txn.amount
+    usage: List[Dict[str, float]] = []
+    for category, limit in budgets.items():
+        if limit is None:
+            continue
+        limit_value = float(limit)
+        spent = round(spend_per_category.get(category, 0.0), 2)
+        if limit_value > 0:
+            percent_used = round((spent / limit_value) * 100, 2)
+        else:
+            percent_used = 100.0 if spent > 0 else 0.0
+        usage.append({
+            "category": category,
+            "spent": spent,
+            "limit": round(limit_value, 2),
+            "percent_used": percent_used,
+        })
+    return usage
+
 
 
 def format_text_report(summary: Dict) -> str:

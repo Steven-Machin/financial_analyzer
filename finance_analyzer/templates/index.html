@@ -431,6 +431,76 @@
       height: 100%;
       background: linear-gradient(90deg, #365feb, #5c7dff);
     }
+    .budgets-overview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 1.25rem;
+    }
+    .budget-card {
+      background: #fff;
+      border-radius: 14px;
+      padding: 1.25rem 1.5rem;
+      box-shadow: 0 12px 28px rgba(15, 23, 42, 0.08);
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+    .budget-card h3 {
+      margin: 0;
+      font-size: 1.05rem;
+      color: #1f2937;
+    }
+    .budget-amount {
+      font-weight: 600;
+      font-size: 1.05rem;
+      color: #111827;
+    }
+    .budget-amount span {
+      color: #6b7285;
+      font-size: 0.9rem;
+      font-weight: 500;
+    }
+    .budget-progress {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+    .budget-progress-track {
+      flex: 1;
+      height: 12px;
+      border-radius: 999px;
+      background: #e0e7ff;
+      overflow: hidden;
+    }
+    .budget-progress-fill {
+      height: 100%;
+      transition: width 0.35s ease;
+    }
+    .budget-progress-fill.ok {
+      background: linear-gradient(90deg, #0f9d58, #34d399);
+    }
+    .budget-progress-fill.warn {
+      background: linear-gradient(90deg, #facc15, #f59e0b);
+    }
+    .budget-progress-fill.over {
+      background: linear-gradient(90deg, #ef4444, #dc2626);
+    }
+    .budget-progress-percent {
+      font-weight: 600;
+      min-width: 3.5rem;
+      text-align: right;
+      color: #1f2937;
+    }
+    @media (max-width: 640px) {
+      .budget-progress {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.5rem;
+      }
+      .budget-progress-percent {
+        text-align: left;
+      }
+    }
     .budget-row.over td {
       background: #fef2f2;
       color: #991b1b;
@@ -939,6 +1009,40 @@
         </tbody>
       </table>
     </section>
+
+    {% if summary.budget_usage %}
+    <section id="budgets-overview">
+      <h2>Budgets Overview</h2>
+      <p class="section-help">See how each budget category is tracking in this view.</p>
+      <div class="budgets-overview-grid">
+        {% for entry in summary.budget_usage %}
+        {% set percent = entry.percent_used %}
+        {% set fill_class = 'ok' %}
+        {% if percent >= 100 %}
+          {% set fill_class = 'over' %}
+        {% elif percent >= 75 %}
+          {% set fill_class = 'warn' %}
+        {% endif %}
+        {% set fill_width = percent %}
+        {% if fill_width < 0 %}
+          {% set fill_width = 0 %}
+        {% elif fill_width > 150 %}
+          {% set fill_width = 150 %}
+        {% endif %}
+        <article class="budget-card">
+          <h3>{{ entry.category }}</h3>
+          <div class="budget-amount">${{ '%0.2f'|format(entry.spent) }} <span>/ ${{ '%0.2f'|format(entry.limit) }}</span></div>
+          <div class="budget-progress">
+            <div class="budget-progress-track">
+              <div class="budget-progress-fill {{ fill_class }}" style="width: {{ '%0.1f'|format(fill_width) }}%;"></div>
+            </div>
+            <div class="budget-progress-percent">{{ '%0.1f'|format(percent) }}%</div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+    {% endif %}
 
     <section id="monthly">
       <h2>Monthly Totals</h2>
