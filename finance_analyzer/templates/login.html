@@ -1,8 +1,8 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
-  <title>{% if mode == 'signup' %}Create Account{% else %}Log In{% endif %} · Personal Finance Analyzer</title>
+  <title>Login - Personal Finance Analyzer</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <style>
     :root {
@@ -37,7 +37,7 @@
     }
     form {
       display: grid;
-      gap: 1.25rem;
+      gap: 1.2rem;
     }
     label {
       display: block;
@@ -49,7 +49,6 @@
       margin-bottom: 0.4rem;
     }
     input[type="text"],
-    input[type="email"],
     input[type="password"] {
       width: 100%;
       border: 1px solid #d1d5db;
@@ -109,8 +108,8 @@
 </head>
 <body>
   <div class="auth-card">
-    <h1>{% if mode == 'signup' %}Create your account{% else %}Welcome back{% endif %}</h1>
-    <p class="subtitle">{% if mode == 'signup' %}Sign up to start tracking your finances.{% else %}Log in to access your dashboard.{% endif %}</p>
+    <h1>Login</h1>
+    <p class="subtitle">Log in to access your dashboard.</p>
 
     {% if errors %}
     <div class="error-panel" role="alert">
@@ -123,34 +122,19 @@
     {% endif %}
 
     <form method="post" autocomplete="off">
-      {% if mode == 'signup' %}
-      <div>
-        <label for="username">Username</label>
-        <input id="username" type="text" name="username" value="{{ form.username }}" required>
-      </div>
-      <div>
-        <label for="email">Email</label>
-        <input id="email" type="email" name="email" value="{{ form.email }}" required>
-      </div>
-      {% else %}
       <div>
         <label for="username">Username or Email</label>
         <input id="username" type="text" name="username" value="{{ form.username }}" required>
       </div>
-      {% endif %}
       <div>
         <label for="password">Password</label>
         <input id="password" type="password" name="password" required>
       </div>
-      <button type="submit" class="primary-button">{% if mode == 'signup' %}Sign Up{% else %}Log In{% endif %}</button>
+      <button type="submit" class="primary-button">Log In</button>
     </form>
 
     <p class="alt-route">
-      {% if mode == 'signup' %}
-      Already have an account? <a href="{{ url_for('login') }}">Log in</a>.
-      {% else %}
       Need an account? <a href="{{ url_for('signup') }}">Sign up</a>.
-      {% endif %}
     </p>
   </div>
 </body>

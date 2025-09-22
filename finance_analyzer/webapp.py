@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import datetime as dt
 import io
-import sqlite3
+import os
 from functools import wraps
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
@@ -25,8 +25,10 @@ from werkzeug.security import check_password_hash, generate_password_hash
 from .analytics import summarize_income_expense
 from .config import AppConfig
 from .categorizer import categorize_transactions
-from .data_loader import DEFAULT_ACCOUNT, Transaction, load_csv_files, load_csv_stream
-from .db import close_db, get_db, init_db
+from .data_loader import DEFAULT_ACCOUNT, Transaction, load_csv_stream
+from sqlalchemy.exc import IntegrityError
+
+from .models import db, User, Account, Transaction as TransactionModel, Budget
 from .reports import build_summary, export_summary_csv, export_summary_json
 
 PACKAGE_ROOT = Path(__file__).resolve().parent
@@ -42,6 +44,11 @@ RANGE_LABELS = {key: label for key, label in RANGE_OPTIONS}
 DEFAULT_RANGE = "last_3"
 PER_PAGE_OPTIONS = (10, 25, 50, 100)
 DEFAULT_PER_PAGE = 25
+
+
+def _user_to_dict(user: User) -> Dict[str, Any]:
+    return {"id": user.id, "username": user.username, "email": user.email}
+
 
 def _filter_recent_transactions(txns: Sequence[Transaction], months: Optional[int]):
     if not txns or not months or months <= 0:
@@ -260,107 +267,121 @@ def _load_logged_in_user() -> None:
     if user_id is None:
         g.user = None
         return
-    db = get_db()
-    g.user = db.execute(
-        "SELECT id, username, email FROM users WHERE id = ?",
-        (user_id,),
-    ).fetchone()
+    user = User.query.get(user_id)
+    if user is None:
+        session.pop("user_id", None)
+        g.user = None
+        return
+    g.user = _user_to_dict(user)
 
 
-def _ensure_account(user_id: int, name: str) -> sqlite3.Row:
+def _ensure_account(user_id: int, name: str) -> Dict[str, Any]:
     account_name = (name or DEFAULT_ACCOUNT).strip() or DEFAULT_ACCOUNT
-    db = get_db()
-    row = db.execute(
-        "SELECT id, name FROM accounts WHERE user_id = ? AND name = ?",
-        (user_id, account_name),
-    ).fetchone()
-    if row:
-        return row
-    db.execute(
-        "INSERT INTO accounts (user_id, name) VALUES (?, ?)",
-        (user_id, account_name),
-    )
-    db.commit()
-    return db.execute(
-        "SELECT id, name FROM accounts WHERE user_id = ? AND name = ?",
-        (user_id, account_name),
-    ).fetchone()
+    account = Account.query.filter_by(user_id=user_id, name=account_name).first()
+    if account is None:
+        account = Account(user_id=user_id, name=account_name)
+        db.session.add(account)
+        try:
+            db.session.commit()
+        except IntegrityError:
+            db.session.rollback()
+            account = Account.query.filter_by(user_id=user_id, name=account_name).first()
+    if account is None:
+        raise RuntimeError("Unable to create or load account")
+    return {"id": account.id, "name": account.name}
 
 
-def _fetch_accounts(user_id: int) -> List[sqlite3.Row]:
-    db = get_db()
-    rows = db.execute(
-        "SELECT id, name FROM accounts WHERE user_id = ? ORDER BY name",
-        (user_id,),
-    ).fetchall()
-    if not rows:
+def _fetch_accounts(user_id: int) -> List[Dict[str, Any]]:
+    accounts = Account.query.filter_by(user_id=user_id).order_by(Account.name).all()
+    if not accounts:
         _ensure_account(user_id, DEFAULT_ACCOUNT)
-        rows = db.execute(
-            "SELECT id, name FROM accounts WHERE user_id = ? ORDER BY name",
-            (user_id,),
-        ).fetchall()
-    return rows
+        accounts = Account.query.filter_by(user_id=user_id).order_by(Account.name).all()
+    return [{"id": account.id, "name": account.name} for account in accounts]
 
 
-def _fetch_transactions(user_id: int) -> List[sqlite3.Row]:
-    db = get_db()
-    return db.execute(
-        """
-        SELECT t.id, t.date, t.description, t.amount, t.source, t.label, a.name AS account, t.account_id
-        FROM transactions t
-        JOIN accounts a ON t.account_id = a.id
-        WHERE t.user_id = ?
-        ORDER BY t.date, t.id
-        """,
-        (user_id,),
-    ).fetchall()
+def _fetch_transactions(user_id: int) -> List[Dict[str, Any]]:
+    txns = (
+        TransactionModel.query
+        .join(Account)
+        .filter(TransactionModel.user_id == user_id)
+        .order_by(TransactionModel.date, TransactionModel.id)
+        .all()
+    )
+    results: List[Dict[str, Any]] = []
+    for txn in txns:
+        results.append({
+            "id": txn.id,
+            "date": txn.date.isoformat(),
+            "description": txn.description,
+            "amount": txn.amount,
+            "source": txn.source,
+            "label": txn.label,
+            "account": txn.account.name if txn.account else DEFAULT_ACCOUNT,
+            "account_id": txn.account_id,
+            "type": txn.type,
+        })
+    return results
 
 
-def _fetch_transaction(user_id: int, txn_id: int) -> Optional[sqlite3.Row]:
-    db = get_db()
-    return db.execute(
-        """
-        SELECT t.id, t.date, t.description, t.amount, t.source, t.label, a.name AS account, t.account_id
-        FROM transactions t
-        JOIN accounts a ON t.account_id = a.id
-        WHERE t.user_id = ? AND t.id = ?
-        """,
-        (user_id, txn_id),
-    ).fetchone()
+def _fetch_transaction(user_id: int, txn_id: int) -> Optional[Dict[str, Any]]:
+    txn = (
+        TransactionModel.query
+        .join(Account)
+        .filter(TransactionModel.user_id == user_id, TransactionModel.id == txn_id)
+        .first()
+    )
+    if txn is None:
+        return None
+    return {
+        "id": txn.id,
+        "date": txn.date.isoformat(),
+        "description": txn.description,
+        "amount": txn.amount,
+        "source": txn.source,
+        "label": txn.label,
+        "account": txn.account.name if txn.account else DEFAULT_ACCOUNT,
+        "account_id": txn.account_id,
+        "type": txn.type,
+    }
 
 
-def _fetch_budgets(user_id: int) -> List[sqlite3.Row]:
-    db = get_db()
-    return db.execute(
-        "SELECT category, monthly_limit FROM budgets WHERE user_id = ? ORDER BY category",
-        (user_id,),
-    ).fetchall()
+def _fetch_budgets(user_id: int) -> List[Dict[str, Any]]:
+    budgets = Budget.query.filter_by(user_id=user_id).order_by(Budget.category).all()
+    return [{"id": budget.id, "category": budget.category, "monthly_limit": budget.monthly_limit} for budget in budgets]
 
 
-def _count_sources(rows: Sequence[sqlite3.Row]) -> Dict[str, int]:
+def _count_sources(rows: Sequence[Dict[str, Any]]) -> Dict[str, int]:
     counts = {"manual": 0, "upload": 0}
     for row in rows:
-        source = (row["source"] or "manual").lower()
-        if source not in counts:
-            counts[source] = 0
-        counts[source] += 1
+        source = (row.get("source") if isinstance(row, dict) else None) or "manual"
+        source_key = source.lower()
+        if source_key not in counts:
+            counts[source_key] = 0
+        counts[source_key] += 1
     return counts
 
 def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional[str] = None) -> Flask:
+    instance_path = PROJECT_ROOT / "instance"
+    instance_path.mkdir(parents=True, exist_ok=True)
+
     app = Flask(
         __name__,
         template_folder=str(PACKAGE_ROOT / "templates"),
         static_folder=str(PACKAGE_ROOT / "static"),
+        instance_path=str(instance_path),
     )
-    app.config["SECRET_KEY"] = "fl99032"
-    app.config.setdefault("DATABASE", str(PROJECT_ROOT / "finance_analyzer.db"))
+    secret_key = os.environ.get("FLASK_SECRET_KEY", "dev-secret-key")
+    app.config["SECRET_KEY"] = secret_key
+    db_path = instance_path / "finance.db"
+    app.config["SQLALCHEMY_DATABASE_URI"] = f"sqlite:///{db_path.as_posix()}"
+    app.config["SQLALCHEMY_TRACK_MODIFICATIONS"] = False
 
     default_inputs = default_inputs or []
 
-    app.teardown_appcontext(close_db)
+    db.init_app(app)
     app.before_request(_load_logged_in_user)
     with app.app_context():
-        init_db()
+        db.create_all()
 
     def _build_summary_payload(user_id: int, filters: Dict[str, Any]):
         transactions_rows = _fetch_transactions(user_id)
@@ -394,37 +415,49 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
         if g.user is not None:
             return redirect(url_for("index"))
         errors: List[str] = []
-        form = {"username": "", "email": ""}
+        form = {"username": "", "email": "", "confirm_password": ""}
         if request.method == "POST":
             username = (request.form.get("username") or "").strip()
             email = (request.form.get("email") or "").strip()
             password = request.form.get("password") or ""
+            confirm = request.form.get("confirm_password") or ""
             form["username"] = username
             form["email"] = email
+            form["confirm_password"] = confirm
             if not username:
                 errors.append("Username is required.")
             if not email:
                 errors.append("Email is required.")
             if not password:
                 errors.append("Password is required.")
+            if password and confirm and password != confirm:
+                errors.append("Passwords do not match.")
             if not errors:
-                db = get_db()
+                existing = User.query.filter(
+                    (User.username == username) | (User.email == email)
+                ).first()
+                if existing:
+                    errors.append("Username or email already exists.")
+            if not errors:
+                user = User(
+                    username=username,
+                    email=email,
+                    password_hash=generate_password_hash(password),
+                )
+                db.session.add(user)
                 try:
-                    cursor = db.execute(
-                        "INSERT INTO users (username, email, password_hash) VALUES (?, ?, ?)",
-                        (username, email, generate_password_hash(password)),
-                    )
-                    user_id = cursor.lastrowid
-                    _ensure_account(user_id, DEFAULT_ACCOUNT)
-                    db.commit()
-                except sqlite3.IntegrityError:
+                    db.session.commit()
+                except IntegrityError:
+                    db.session.rollback()
                     errors.append("Username or email already exists.")
                 else:
+                    _ensure_account(user.id, DEFAULT_ACCOUNT)
                     session.clear()
-                    session["user_id"] = user_id
+                    session["user_id"] = user.id
                     return redirect(url_for("index"))
-        return render_template("auth.html", mode="signup", errors=errors, form=form)
+        return render_template("signup.html", errors=errors, form=form)
 
+    
     @app.route("/login", methods=["GET", "POST"])
     def login():
         if g.user is not None:
@@ -435,19 +468,18 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             username = (request.form.get("username") or "").strip()
             password = request.form.get("password") or ""
             form["username"] = username
-            db = get_db()
-            user = db.execute(
-                "SELECT * FROM users WHERE username = ? OR email = ?",
-                (username, username),
-            ).fetchone()
-            if user is None or not check_password_hash(user["password_hash"], password):
+            user = User.query.filter(
+                (User.username == username) | (User.email == username)
+            ).first()
+            if user is None or not check_password_hash(user.password_hash, password):
                 errors.append("Invalid credentials.")
             else:
                 session.clear()
-                session["user_id"] = user["id"]
+                session["user_id"] = user.id
                 return redirect(url_for("index"))
-        return render_template("auth.html", mode="login", errors=errors, form=form)
+        return render_template("login.html", errors=errors, form=form)
 
+    
     @app.route("/logout", methods=["POST"])
     @login_required
     def logout():
@@ -481,7 +513,6 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
 
         if request.method == "POST":
             action = request.form.get("action", "")
-            db = get_db()
             if action in {"add_manual", "save_edit"}:
                 manual_form = {
                     "date": (request.form.get("date") or "").strip(),
@@ -516,48 +547,39 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                 account_row = _ensure_account(user_id, manual_form["account"])
                 manual_form["account"] = account_row["name"]
                 if not errors and date_value and amount_value is not None:
+                    txn_type_label = "Income" if amount_value >= 0 else "Expense"
                     if action == "add_manual":
-                        db.execute(
-                            """
-                            INSERT INTO transactions (user_id, account_id, date, description, amount, source)
-                            VALUES (?, ?, ?, ?, ?, ?)
-                            """,
-                            (
-                                user_id,
-                                account_row["id"],
-                                date_value.isoformat(),
-                                manual_form["description"],
-                                amount_value,
-                                "manual",
-                            ),
+                        db.session.add(
+                            TransactionModel(
+                                user_id=user_id,
+                                account_id=account_row["id"],
+                                date=date_value,
+                                description=manual_form["description"],
+                                amount=amount_value,
+                                type=txn_type_label,
+                                source="manual",
+                            )
                         )
-                        db.commit()
+                        db.session.commit()
                         return _redirect_to_index(filters, {"page": None})
                     if action == "save_edit":
                         target_id = request.form.get("transaction_id") or ""
                         if not target_id.isdigit():
                             errors.append("Unable to update the selected transaction.")
                         else:
-                            existing = _fetch_transaction(user_id, int(target_id))
+                            existing = TransactionModel.query.filter_by(
+                                user_id=user_id, id=int(target_id)
+                            ).first()
                             if not existing:
                                 errors.append("Unable to update the selected transaction.")
                             else:
-                                db.execute(
-                                    """
-                                    UPDATE transactions
-                                    SET account_id = ?, date = ?, description = ?, amount = ?, source = 'manual'
-                                    WHERE id = ? AND user_id = ?
-                                    """,
-                                    (
-                                        account_row["id"],
-                                        date_value.isoformat(),
-                                        manual_form["description"],
-                                        amount_value,
-                                        int(target_id),
-                                        user_id,
-                                    ),
-                                )
-                                db.commit()
+                                existing.account_id = account_row["id"]
+                                existing.date = date_value
+                                existing.description = manual_form["description"]
+                                existing.amount = amount_value
+                                existing.type = txn_type_label
+                                existing.source = "manual"
+                                db.session.commit()
                                 return _redirect_to_index(filters, {"page": None})
                 else:
                     form_mode = "edit" if action == "save_edit" else "add"
@@ -565,17 +587,18 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
             elif action == "delete_transaction":
                 target_id = request.form.get("transaction_id") or ""
                 if target_id.isdigit():
-                    db.execute(
-                        "DELETE FROM transactions WHERE id = ? AND user_id = ?",
-                        (int(target_id), user_id),
-                    )
-                    db.commit()
+                    txn = TransactionModel.query.filter_by(
+                        user_id=user_id, id=int(target_id)
+                    ).first()
+                    if txn:
+                        db.session.delete(txn)
+                        db.session.commit()
                 else:
                     errors.append("Unable to remove the selected transaction.")
                 return _redirect_to_index(filters, {"page": None})
             elif action == "clear_transactions":
-                db.execute("DELETE FROM transactions WHERE user_id = ?", (user_id,))
-                db.commit()
+                TransactionModel.query.filter_by(user_id=user_id).delete(synchronize_session=False)
+                db.session.commit()
                 return _redirect_to_index(filters, {"page": None})
             elif action == "upload_csv":
                 file = request.files.get("csv_file")
@@ -599,26 +622,31 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                         except ValueError as exc:
                             errors.append(str(exc))
                         else:
+                            new_rows = []
                             for txn in uploaded_txns:
                                 account_name = txn.account or chosen_account or DEFAULT_ACCOUNT
                                 account_row = _ensure_account(user_id, account_name)
-                                db.execute(
-                                    """
-                                    INSERT INTO transactions (user_id, account_id, date, description, amount, source, label)
-                                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                                    """,
-                                    (
-                                        user_id,
-                                        account_row["id"],
-                                        txn.date.isoformat(),
-                                        txn.description,
-                                        txn.amount,
-                                        "upload",
-                                        file.filename,
-                                    ),
+                                txn_type_label = "Income" if txn.amount >= 0 else "Expense"
+                                new_rows.append(
+                                    TransactionModel(
+                                        user_id=user_id,
+                                        account_id=account_row["id"],
+                                        date=txn.date,
+                                        description=txn.description,
+                                        amount=txn.amount,
+                                        type=txn_type_label,
+                                        source="upload",
+                                        label=file.filename,
+                                    )
                                 )
-                            db.commit()
-                            return _redirect_to_index(filters, {"page": None})
+                            try:
+                                db.session.add_all(new_rows)
+                                db.session.commit()
+                            except IntegrityError as exc:
+                                db.session.rollback()
+                                errors.append("Unable to import CSV data: " + str(exc))
+                            else:
+                                return _redirect_to_index(filters, {"page": None})
             elif action == "add_budget":
                 budget_form = {
                     "category": (request.form.get("budget_category") or "").strip(),
@@ -635,57 +663,62 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
                     if limit_value <= 0:
                         errors.append("Budget limit must be greater than zero.")
                 if not errors and limit_value is not None:
-                    db.execute(
-                        """
-                        INSERT INTO budgets (user_id, category, monthly_limit)
-                        VALUES (?, ?, ?)
-                        ON CONFLICT(user_id, category) DO UPDATE
-                        SET monthly_limit = excluded.monthly_limit
-                        """,
-                        (user_id, budget_form["category"], limit_value),
-                    )
-                    db.commit()
+                    budget = Budget.query.filter_by(
+                        user_id=user_id, category=budget_form["category"]
+                    ).first()
+                    if budget is None:
+                        budget = Budget(
+                            user_id=user_id,
+                            category=budget_form["category"],
+                            monthly_limit=limit_value,
+                        )
+                        db.session.add(budget)
+                    else:
+                        budget.monthly_limit = limit_value
+                    db.session.commit()
                     return _redirect_to_index(filters, {"page": None})
             elif action == "remove_budget":
                 category = (request.form.get("budget_category") or "").strip()
                 if category:
-                    db.execute(
-                        "DELETE FROM budgets WHERE user_id = ? AND category = ?",
-                        (user_id, category),
-                    )
-                    db.commit()
-                    return _redirect_to_index(filters, {"page": None})
+                    budget = Budget.query.filter_by(user_id=user_id, category=category).first()
+                    if budget:
+                        db.session.delete(budget)
+                        db.session.commit()
+                        return _redirect_to_index(filters, {"page": None})
             elif action == "add_account":
                 account_name = (request.form.get("account_name") or "").strip()
                 if not account_name:
                     errors.append("Account name is required.")
                 else:
-                    try:
-                        _ensure_account(user_id, account_name)
-                        manual_form["account"] = account_name
-                        db.commit()
-                        return _redirect_to_index(filters, {"page": None})
-                    except sqlite3.IntegrityError:
+                    exists = Account.query.filter_by(user_id=user_id, name=account_name).first()
+                    if exists:
                         errors.append("That account already exists.")
+                    else:
+                        db.session.add(Account(user_id=user_id, name=account_name))
+                        try:
+                            db.session.commit()
+                        except IntegrityError:
+                            db.session.rollback()
+                            errors.append("That account already exists.")
+                        else:
+                            manual_form["account"] = account_name
+                            return _redirect_to_index(filters, {"page": None})
             elif action == "delete_account":
                 account_name = (request.form.get("account_name") or "").strip()
-                account_row = _ensure_account(user_id, account_name)
-                account_id = account_row["id"]
-                if account_row["name"] == DEFAULT_ACCOUNT:
+                account = Account.query.filter_by(user_id=user_id, name=account_name).first()
+                if account is None:
+                    errors.append("Account not found.")
+                elif account.name == DEFAULT_ACCOUNT:
                     errors.append("Cannot delete the default account.")
                 else:
-                    usage = db.execute(
-                        "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ? AND account_id = ?",
-                        (user_id, account_id),
-                    ).fetchone()["count"]
+                    usage = TransactionModel.query.filter_by(
+                        user_id=user_id, account_id=account.id
+                    ).count()
                     if usage:
                         errors.append("Cannot delete an account that has transactions.")
                     else:
-                        db.execute(
-                            "DELETE FROM accounts WHERE id = ? AND user_id = ?",
-                            (account_id, user_id),
-                        )
-                        db.commit()
+                        db.session.delete(account)
+                        db.session.commit()
                         return _redirect_to_index(filters, {"account": "all", "page": None})
         transactions_rows = _fetch_transactions(user_id)
         transactions = [
@@ -832,14 +865,11 @@ def create_app(default_inputs: Optional[List[str]] = None, config_path: Optional
 
         overall_totals_all = summarize_income_expense(transactions) if transactions else {"income": 0.0, "expense": 0.0, "net": 0.0}
 
-        db = get_db()
-        account_usage = {
-            row["name"]: db.execute(
-                "SELECT COUNT(*) AS count FROM transactions WHERE user_id = ? AND account_id = ?",
-                (user_id, row["id"]),
-            ).fetchone()["count"]
-            for row in accounts
-        }
+        usage_counts: Dict[str, int] = {}
+        for row in transactions_rows:
+            account_key = row.get("account") or DEFAULT_ACCOUNT
+            usage_counts[account_key] = usage_counts.get(account_key, 0) + 1
+        account_usage = {row["name"]: usage_counts.get(row["name"], 0) for row in accounts}
         account_management = [
             {
                 "name": row["name"],

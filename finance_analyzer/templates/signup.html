@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Sign Up - Personal Finance Analyzer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root {
+      color-scheme: light dark;
+      font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+      background-color: #f6f7fb;
+      color: #1f2937;
+    }
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem 1rem;
+    }
+    .auth-card {
+      width: min(420px, 90vw);
+      background: #fff;
+      border-radius: 18px;
+      box-shadow: 0 18px 48px rgba(15, 23, 42, 0.15);
+      padding: 2.4rem 2.2rem 2.6rem;
+    }
+    .auth-card h1 {
+      margin: 0 0 0.35rem;
+      font-size: 2rem;
+    }
+    .auth-card p.subtitle {
+      margin: 0 0 1.8rem;
+      color: #6b7285;
+      font-size: 0.95rem;
+    }
+    form {
+      display: grid;
+      gap: 1.2rem;
+    }
+    label {
+      display: block;
+      font-size: 0.8rem;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-weight: 600;
+      color: #4b5563;
+      margin-bottom: 0.4rem;
+    }
+    input[type="text"],
+    input[type="email"],
+    input[type="password"] {
+      width: 100%;
+      border: 1px solid #d1d5db;
+      border-radius: 10px;
+      padding: 0.65rem 0.75rem;
+      font-size: 1rem;
+      background: #f9fafc;
+    }
+    input:focus {
+      outline: none;
+      border-color: #365feb;
+      box-shadow: 0 0 0 3px rgba(54, 95, 235, 0.18);
+      background: #fff;
+    }
+    .primary-button {
+      border: none;
+      background: linear-gradient(135deg, #365feb, #4f75ff);
+      color: #fff;
+      padding: 0.75rem 1.2rem;
+      border-radius: 999px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+    .primary-button:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(54, 95, 235, 0.25);
+    }
+    .alt-route {
+      margin-top: 1.5rem;
+      font-size: 0.95rem;
+      text-align: center;
+      color: #6b7285;
+    }
+    .alt-route a {
+      color: #365feb;
+      font-weight: 600;
+      text-decoration: none;
+    }
+    .alt-route a:hover {
+      text-decoration: underline;
+    }
+    .error-panel {
+      background: #fee2e2;
+      border: 1px solid #fca5a5;
+      color: #991b1b;
+      border-radius: 10px;
+      padding: 0.75rem 1rem;
+      margin-bottom: 1.3rem;
+    }
+    .error-panel ul {
+      margin: 0;
+      padding-left: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="auth-card">
+    <h1>Sign Up</h1>
+    <p class="subtitle">Create an account to start tracking your finances.</p>
+
+    {% if errors %}
+    <div class="error-panel" role="alert">
+      <ul>
+        {% for message in errors %}
+        <li>{{ message }}</li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endif %}
+
+    <form method="post" autocomplete="off">
+      <div>
+        <label for="username">Username</label>
+        <input id="username" type="text" name="username" value="{{ form.username }}" required>
+      </div>
+      <div>
+        <label for="email">Email</label>
+        <input id="email" type="email" name="email" value="{{ form.email }}" required>
+      </div>
+      <div>
+        <label for="password">Password</label>
+        <input id="password" type="password" name="password" required>
+      </div>
+      <div>
+        <label for="confirm">Confirm Password</label>
+        <input id="confirm" type="password" name="confirm_password" value="{{ form.confirm_password }}" required>
+      </div>
+      <button type="submit" class="primary-button">Create Account</button>
+    </form>
+
+    <p class="alt-route">
+      Already have an account? <a href="{{ url_for('login') }}">Log in</a>.
+    </p>
+  </div>
+</body>
+</html>
